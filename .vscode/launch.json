@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "WanderLens (Flutter)",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "WanderLens (Chrome)",
+            "request": "launch",
+            "type": "dart",
+            "args": ["-d", "chrome"]
+        },
+        {
+            "name": "Launch Chrome against localhost",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8080",
+            "webRoot": "${workspaceFolder}"
+        }
+    ]
+}

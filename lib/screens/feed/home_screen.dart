@@ -1,0 +1,147 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:wanderlens/models/post.dart';
+import 'package:wanderlens/services/user_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:wanderlens/widgets/post_card.dart';
+import 'package:wanderlens/screens/auth/login_screen.dart';
+
+import '../../responsive/constrained_scaffold.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  Future<void> _refreshFeed() async {
+    setState(() {});
+  }
+
+  Future<void> _logout() async {
+    final navigator = Navigator.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await UserService.logout();
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedScaffold(
+      appBar: AppBar(
+        title: const Text('WanderLens', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: () {},
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red, size: 20),
+                    SizedBox(width: 10),
+                    Text('Logout', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshFeed,
+        child: StreamBuilder<QuerySnapshot>(
+          // Real-time updates from the main posts collection
+          stream: _firestore.collection('posts').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Center(
+                child: Text('No posts yet. Start following people!'),
+              );
+            }
+
+            // Map and filter posts
+            final List<Post> posts = snapshot.data!.docs.map((doc) {
+              return Post.fromJson(doc.data() as Map<String, dynamic>);
+            }).where((post) {
+              // Show public posts OR posts created by the current user
+              return post.privacy == PostPrivacy.public || post.userId == _currentUserId;
+            }).toList();
+
+            // Sort newest first
+            posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+            if (posts.isEmpty) {
+              return const Center(child: Text('No posts to show.'));
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.only(top: 8),
+              itemCount: posts.length,
+              itemBuilder: (context, index) {
+                final post = posts[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: PostCard(
+                    key: ValueKey(post.id), // Important for correct state tracking
+                    post: post,
+                    currentUserId: _currentUserId,
+                    onPostUpdated: () => setState(() {}),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

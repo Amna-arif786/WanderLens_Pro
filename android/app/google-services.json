@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "414659217522",
+    "project_id": "wanderlense-pc",
+    "storage_bucket": "wanderlense-pc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:414659217522:android:1207eb66d9e30a21bb1aeb",
+        "android_client_info": {
+          "package_name": "com.mycompany.CounterApp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "414659217522-1l6unso6emtucf33kin4ig6025lu5o7n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mycompany.CounterApp",
+            "certificate_hash": "b2b21cf67ad3096772f4a8839133d63e47d40022"
+          }
+        },
+        {
+          "client_id": "414659217522-7vkpkm3r52tdvd0fpo8mi00ub75mg48g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDj6inyyec2yLDhUzmT7dQY_bkAqsCv3XQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "414659217522-7vkpkm3r52tdvd0fpo8mi00ub75mg48g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "414659217522-ech7fd01vvhe9qvckgstddbsbafutmn3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mycompany.CounterApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

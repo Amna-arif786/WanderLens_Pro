@@ -1,0 +1,32 @@
+plugins {
+    id "com.android.application"
+    id 'com.google.gms.google-services'
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.mycompany.WanderLens"
+    compileSdk = 35 // Direct version number
+    
+    defaultConfig {
+        applicationId = "com.mycompany.WanderLense"
+        minSdkVersion flutter.minSdkVersion
+        targetSdk 35 // Direct version number
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+flutter {
+    source = "../.."
+}
