@@ -5,6 +5,7 @@ import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/models/comment.dart';
 import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/services/comment_service.dart';
+import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 
 class CommentsBottomSheet extends StatefulWidget {
@@ -70,56 +71,88 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
     }
   }
 
+  void _navigateToProfile(BuildContext context, String userId) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)));
+  }
+
+  void _showCommentOptions(Comment comment) {
+    if (comment.userId != widget.currentUserId) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('Edit Comment'),
+            onTap: () {
+              Navigator.pop(context);
+              _showEditCommentDialog(comment);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: const Text('Delete Comment', style: TextStyle(color: Colors.red)),
+            onTap: () async {
+              Navigator.pop(context);
+              await CommentService.deleteComment(widget.post.id, comment.id);
+              _loadComments();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditCommentDialog(Comment comment) {
+    final controller = TextEditingController(text: comment.content);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Comment'),
+        content: TextField(controller: controller),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              await CommentService.updateComment(widget.post.id, comment.id, controller.text);
+              Navigator.pop(context);
+              _loadComments();
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const Text(
-            'Comments',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+          Container(margin: const EdgeInsets.symmetric(vertical: 12), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+          const Text('Comments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const Divider(),
-          
-          // Comments List
           Flexible(
             child: _isLoading
                 ? const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()))
                 : _comments.isEmpty
-                    ? const SizedBox(
-                        height: 200,
-                        child: Center(child: Text('No comments yet. Be the first!', style: TextStyle(color: Colors.grey))),
-                      )
+                    ? const SizedBox(height: 200, child: Center(child: Text('No comments yet', style: TextStyle(color: Colors.grey))))
                     : ListView.builder(
                         shrinkWrap: true,
                         itemCount: _comments.length,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemBuilder: (context, index) {
-                          final comment = _comments[index];
-                          return _buildCommentItem(comment);
-                        },
+                        itemBuilder: (context, index) => _buildCommentItem(_comments[index]),
                       ),
           ),
-
-          // Input field
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -127,23 +160,16 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                 Expanded(
                   child: TextField(
                     controller: _commentController,
-                    autofocus: true,
                     decoration: InputDecoration(
                       hintText: 'Add a comment...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
-                      ),
                       filled: true,
                       fillColor: Colors.grey[100],
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: _isSubmitting ? null : _addComment,
-                  icon: Icon(Icons.send, color: Theme.of(context).colorScheme.primary),
-                ),
+                IconButton(onPressed: _isSubmitting ? null : _addComment, icon: Icon(Icons.send, color: Theme.of(context).colorScheme.primary)),
               ],
             ),
           ),
@@ -157,37 +183,35 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
       future: UserService.getUserById(comment.userId),
       builder: (context, snapshot) {
         final user = snapshot.data;
+        final bool isMyComment = comment.userId == widget.currentUserId;
+
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          padding: const EdgeInsets.symmetric(vertical: 10.0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              UserAvatar(imageUrl: user?.profileImageUrl, size: 32),
+              GestureDetector(onTap: () => _navigateToProfile(context, comment.userId), child: UserAvatar(imageUrl: user?.profileImageUrl, size: 35)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    RichText(
-                      text: TextSpan(
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                        children: [
-                          TextSpan(
-                            text: '${user?.username ?? '...'} ',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          TextSpan(text: comment.content),
-                        ],
-                      ),
+                    GestureDetector(
+                      onTap: () => _navigateToProfile(context, comment.userId),
+                      child: Text(user?.username ?? '...', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
+                    const SizedBox(height: 2),
+                    Text(comment.content, style: const TextStyle(fontSize: 14, color: Colors.black87)),
                     const SizedBox(height: 4),
-                    Text(
-                      DateFormat('MMM dd, HH:mm').format(comment.createdAt),
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
+                    Text(DateFormat('MMM dd, HH:mm').format(comment.createdAt), style: const TextStyle(fontSize: 10, color: Colors.grey)),
                   ],
                 ),
               ),
+              if (isMyComment)
+                IconButton(
+                  icon: const Icon(Icons.more_horiz, size: 20, color: Colors.grey),
+                  onPressed: () => _showCommentOptions(comment),
+                ),
             ],
           ),
         );

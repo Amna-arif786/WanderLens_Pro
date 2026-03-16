@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum PostPrivacy { public, friends }
+enum PostPrivacy { public, private, friends }
 
 class Post {
   final String id;
   final String userId;
   final String? username;
-  final String? userDisplayName; // Added for denormalization
+  final String? userDisplayName; 
   final String? userProfileImage;
   final String imageUrl;
   final String caption;

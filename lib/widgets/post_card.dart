@@ -7,6 +7,7 @@ import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/services/wishlist_service.dart';
 import 'package:wanderlens/services/like_service.dart';
 import 'package:wanderlens/screens/post/post_detail_screen.dart';
+import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 import 'package:wanderlens/widgets/comments_bottom_sheet.dart';
 
@@ -29,22 +30,11 @@ class PostCard extends StatefulWidget {
 class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin {
   bool _isLiked = false;
   bool _isSaved = false;
-  late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
     _checkInteractionStatus();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
   }
 
   Future<void> _checkInteractionStatus() async {
@@ -67,9 +57,21 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
     return 'Just now';
   }
 
+  void _navigateToProfile(BuildContext context, String userId) {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId)));
+  }
+
+  void _showComments() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => CommentsBottomSheet(post: widget.post, currentUserId: widget.currentUserId),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Stream user data to ensure profile picture is always the latest
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(widget.post.userId).snapshots(),
       builder: (context, snapshot) {
@@ -79,67 +81,96 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
         }
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 5)),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    UserAvatar(imageUrl: author?.profileImageUrl ?? widget.post.userProfileImage, size: 40),
+                    GestureDetector(
+                      onTap: () => _navigateToProfile(context, widget.post.userId),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle, 
+                          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2), width: 2)
+                        ),
+                        child: UserAvatar(imageUrl: author?.profileImageUrl ?? widget.post.userProfileImage, size: 38),
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(author?.displayName ?? widget.post.userDisplayName ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 8),
-                              Text('• ${_getTimeAgo(widget.post.createdAt)}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                            ],
-                          ),
-                          Text('📍 ${widget.post.location}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                        ],
+                      child: GestureDetector(
+                        onTap: () => _navigateToProfile(context, widget.post.userId),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(author?.displayName ?? widget.post.userDisplayName ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            Row(
+                              children: [
+                                Icon(Icons.place, size: 12, color: Theme.of(context).colorScheme.primary),
+                                const SizedBox(width: 2),
+                                Text('${widget.post.location}, ${widget.post.cityName}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                const SizedBox(width: 8),
+                                Text('• ${_getTimeAgo(widget.post.createdAt)}', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // Post Image
+              // Post Image - Changed to show full image without cropping
               GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: widget.post, currentUserId: widget.currentUserId))),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 500),
-                    width: double.infinity,
-                    child: Image.network(widget.post.imageUrl, width: double.infinity, fit: BoxFit.contain),
+                  borderRadius: BorderRadius.circular(15),
+                  child: Image.network(
+                    widget.post.imageUrl, 
+                    width: double.infinity, 
+                    fit: BoxFit.contain, // Shows full image without cropping
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 300,
+                        color: Colors.grey[100],
+                        child: const Center(child: CircularProgressIndicator()),
+                      );
+                    },
                   ),
                 ),
               ),
-              // Action Buttons (Like, Comment, Save)
+              // Action Buttons
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border, color: _isLiked ? Colors.red : null),
+                      icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border, color: _isLiked ? Colors.red : Colors.black87),
                       onPressed: () async {
                         setState(() => _isLiked = !_isLiked);
                         await LikeService.toggleLike(widget.post.id, widget.currentUserId);
                       },
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.mode_comment_outlined, color: Colors.black87),
+                      onPressed: _showComments,
+                    ),
                     const Spacer(),
                     IconButton(
-                      icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? Colors.blue : null),
+                      icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? Colors.blue : Colors.black87),
                       onPressed: () async {
                         setState(() => _isSaved = !_isSaved);
                         await WishlistService.toggleWishlist(widget.post.id, widget.currentUserId);
@@ -149,17 +180,40 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
-              // Caption
+              // Caption & Likes Section
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: RichText(
-                  text: TextSpan(
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                    children: [
-                      TextSpan(text: '${author?.username ?? widget.post.username} ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      TextSpan(text: widget.post.caption),
-                    ],
-                  ),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${widget.post.likeCount} likes',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(color: Colors.black87, fontSize: 14),
+                        children: [
+                          WidgetSpan(
+                            child: GestureDetector(
+                              onTap: () => _navigateToProfile(context, widget.post.userId),
+                              child: Text('${author?.username ?? widget.post.username}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          TextSpan(text: widget.post.caption),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: _showComments,
+                      child: Text(
+                        'View all comments',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

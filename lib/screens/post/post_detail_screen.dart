@@ -4,10 +4,13 @@ import 'package:wanderlens/models/post.dart';
 import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/models/comment.dart';
 import 'package:wanderlens/services/user_service.dart';
+import 'package:wanderlens/services/post_service.dart';
 import 'package:wanderlens/services/comment_service.dart';
 import 'package:wanderlens/services/like_service.dart';
 import 'package:wanderlens/services/wishlist_service.dart';
+import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
+import 'package:wanderlens/utils/location_constants.dart';
 
 import '../../responsive/constrained_scaffold.dart';
 
@@ -30,6 +33,7 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
+  Post? _editedPost; 
   User? _postAuthor;
   List<Comment> _comments = [];
   bool _isLiked = false;
@@ -39,6 +43,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final TextEditingController _commentController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _commentFocusNode = FocusNode();
+
+  Post get _displayPost => _editedPost ?? widget.post;
 
   @override
   void initState() {
@@ -64,10 +70,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() => _isLoading = true);
     
     try {
-      final author = await UserService.getUserById(widget.post.userId);
-      final comments = await CommentService.getCommentsByPostId(widget.post.id);
-      final isLiked = await LikeService.isPostLikedByUser(widget.post.id, widget.currentUserId);
-      final isSaved = await WishlistService.isPostInWishlist(widget.post.id, widget.currentUserId);
+      final author = await UserService.getUserById(_displayPost.userId);
+      final comments = await CommentService.getCommentsByPostId(_displayPost.id);
+      final isLiked = await LikeService.isPostLikedByUser(_displayPost.id, widget.currentUserId);
+      final isSaved = await WishlistService.isPostInWishlist(_displayPost.id, widget.currentUserId);
 
       if (mounted) {
         setState(() {
@@ -87,7 +93,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (widget.currentUserId.isEmpty) return;
     setState(() => _isLiked = !_isLiked);
     try {
-      await LikeService.toggleLike(widget.post.id, widget.currentUserId);
+      await LikeService.toggleLike(_displayPost.id, widget.currentUserId);
       widget.onPostUpdated?.call();
     } catch (e) {
       setState(() => _isLiked = !_isLiked);
@@ -98,7 +104,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (widget.currentUserId.isEmpty) return;
     setState(() => _isSaved = !_isSaved);
     try {
-      await WishlistService.toggleWishlist(widget.post.id, widget.currentUserId);
+      await WishlistService.toggleWishlist(_displayPost.id, widget.currentUserId);
       widget.onPostUpdated?.call();
     } catch (e) {
       setState(() => _isSaved = !_isSaved);
@@ -110,7 +116,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() => _isSubmittingComment = true);
     try {
       await CommentService.createComment(
-        postId: widget.post.id,
+        postId: _displayPost.id,
         userId: widget.currentUserId,
         content: _commentController.text.trim(),
       );
@@ -119,6 +125,133 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       widget.onPostUpdated?.call();
     } finally {
       if (mounted) setState(() => _isSubmittingComment = false);
+    }
+  }
+
+  void _showPostOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('Edit Post'),
+            onTap: () {
+              Navigator.pop(context);
+              _showEditPostDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(context);
+              _confirmDelete();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditPostDialog() {
+    final captionController = TextEditingController(text: _displayPost.caption);
+    final locationController = TextEditingController(text: _displayPost.location);
+    final cityController = TextEditingController(text: _displayPost.cityName);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Post'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: captionController,
+                decoration: const InputDecoration(labelText: 'Caption'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: locationController,
+                decoration: const InputDecoration(labelText: 'Location/Monument'),
+              ),
+              const SizedBox(height: 12),
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _displayPost.cityName),
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return const Iterable<String>.empty();
+                  }
+                  return LocationConstants.pakistanCities.where((String city) {
+                    return city.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                  });
+                },
+                onSelected: (String selection) {
+                  cityController.text = selection;
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    onFieldSubmitted: (value) => onFieldSubmitted(),
+                    decoration: const InputDecoration(
+                      labelText: 'City',
+                      hintText: 'e.g., Lahore, Karachi',
+                    ),
+                    onChanged: (value) => cityController.text = value,
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              final updatedPost = _displayPost.copyWith(
+                caption: captionController.text.trim(),
+                location: locationController.text.trim(),
+                cityName: cityController.text.trim(),
+              );
+              await PostService.updatePost(updatedPost);
+              setState(() => _editedPost = updatedPost);
+              Navigator.pop(context);
+              widget.onPostUpdated?.call();
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Post'),
+        content: const Text('Are you sure you want to delete this post? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await PostService.deletePost(_displayPost.id);
+      if (mounted) {
+        widget.onPostUpdated?.call();
+        Navigator.pop(context); 
+      }
     }
   }
 
@@ -143,7 +276,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             title: const Text('Delete Comment', style: TextStyle(color: Colors.red)),
             onTap: () async {
               Navigator.pop(context);
-              await CommentService.deleteComment(widget.post.id, comment.id);
+              await CommentService.deleteComment(_displayPost.id, comment.id);
               _loadPostDetails();
             },
           ),
@@ -163,7 +296,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
-              await CommentService.updateComment(widget.post.id, comment.id, controller.text);
+              await CommentService.updateComment(_displayPost.id, comment.id, controller.text);
               Navigator.pop(context);
               _loadPostDetails();
             },
@@ -174,14 +307,32 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  void _navigateToProfile(String userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(userId: userId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isAuthor = _displayPost.userId == widget.currentUserId;
+
     return ConstrainedScaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('Post Details', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          if (isAuthor)
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: _showPostOptions,
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -207,20 +358,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Widget _buildPostHeader() {
     return ListTile(
-      leading: UserAvatar(imageUrl: _postAuthor?.profileImageUrl, size: 40),
-      title: Text(_postAuthor?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text('📍 ${widget.post.location}', style: const TextStyle(fontSize: 12)),
+      leading: GestureDetector(
+        onTap: () => _navigateToProfile(_displayPost.userId),
+        child: UserAvatar(imageUrl: _postAuthor?.profileImageUrl, size: 40),
+      ),
+      title: GestureDetector(
+        onTap: () => _navigateToProfile(_displayPost.userId),
+        child: Text(_postAuthor?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      subtitle: Text('📍 ${_displayPost.location}, ${_displayPost.cityName}', style: const TextStyle(fontSize: 12)),
       trailing: Text(
-        DateFormat('MMM dd').format(widget.post.createdAt),
+        DateFormat('MMM dd').format(_displayPost.createdAt),
         style: const TextStyle(color: Colors.grey, fontSize: 12),
       ),
     );
   }
 
   Widget _buildPostImage() {
-    return widget.post.imageUrl.startsWith('http')
-        ? Image.network(widget.post.imageUrl, width: double.infinity, fit: BoxFit.contain)
-        : Image.asset(widget.post.imageUrl, width: double.infinity, fit: BoxFit.contain);
+    return _displayPost.imageUrl.startsWith('http')
+        ? Image.network(_displayPost.imageUrl, width: double.infinity, fit: BoxFit.contain)
+        : Image.asset(_displayPost.imageUrl, width: double.infinity, fit: BoxFit.contain);
   }
 
   Widget _buildActionButtons() {
@@ -246,7 +403,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Text(
-              '${widget.post.likeCount} likes',
+              '${_displayPost.likeCount} likes',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -256,8 +413,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               text: TextSpan(
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                 children: [
-                  TextSpan(text: '${_postAuthor?.username} ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  TextSpan(text: widget.post.caption),
+                  WidgetSpan(
+                    child: GestureDetector(
+                      onTap: () => _navigateToProfile(_displayPost.userId),
+                      child: Text('${_postAuthor?.username ?? ""} ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  TextSpan(text: _displayPost.caption),
                 ],
               ),
             ),
@@ -290,18 +452,42 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               future: UserService.getUserById(comment.userId),
               builder: (context, snapshot) {
                 final user = snapshot.data;
-                return ListTile(
-                  onLongPress: () => _showCommentOptions(comment),
-                  leading: UserAvatar(imageUrl: user?.profileImageUrl, size: 30),
-                  title: Text(user?.username ?? '...', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Column(
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(comment.content, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(height: 2),
-                      Text(
-                        DateFormat('MMM dd, HH:mm').format(comment.createdAt),
-                        style: const TextStyle(fontSize: 10, color: Colors.grey),
+                      GestureDetector(
+                        onTap: () => _navigateToProfile(comment.userId),
+                        child: UserAvatar(imageUrl: user?.profileImageUrl, size: 35),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            GestureDetector(
+                              onTap: () => _navigateToProfile(comment.userId),
+                              child: Text(
+                                user?.username ?? '...',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            GestureDetector(
+                              onLongPress: () => _showCommentOptions(comment),
+                              child: Text(
+                                comment.content,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              DateFormat('MMM dd, HH:mm').format(comment.createdAt),
+                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

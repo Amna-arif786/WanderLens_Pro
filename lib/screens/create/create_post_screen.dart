@@ -7,6 +7,7 @@ import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/services/image_verification_service.dart';
 import 'package:wanderlens/storage/cloudinary_service.dart';
 import 'package:wanderlens/screens/main_navigation.dart';
+import 'package:wanderlens/utils/location_constants.dart';
 
 import '../../responsive/constrained_scaffold.dart';
 
@@ -221,8 +222,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        
-        // Clear the form
+
         _captionController.clear();
         _locationController.clear();
         _cityController.clear();
@@ -231,8 +231,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           _privacy = PostPrivacy.public;
         });
 
-        // Navigate to Home Tab (Index 0) to see the new post
-        MainNavigation.navigationKey.currentState?.switchTab(0);
+        if (MainNavigation.navigationKey.currentState != null) {
+          MainNavigation.navigationKey.currentState!.switchTab(0);
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const MainNavigation()),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -373,10 +379,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
-            ),
           ),
           maxLines: 3,
           validator: (value) {
@@ -391,14 +393,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           controller: _locationController,
           decoration: InputDecoration(
             labelText: 'Location/Monument',
-            hintText: 'e.g., Eiffel Tower, Taj Mahal',
+            hintText: 'e.g., Badshahi Mosque, Faisal Masjid',
             prefixIcon: Icon(Icons.place_outlined, color: Theme.of(context).colorScheme.primary),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
             ),
           ),
           validator: (value) {
@@ -409,25 +407,45 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           },
         ),
         const SizedBox(height: 16),
-        TextFormField(
-          controller: _cityController,
-          decoration: InputDecoration(
-            labelText: 'City/Country',
-            hintText: 'e.g., Paris, France',
-            prefixIcon: Icon(Icons.location_city_outlined, color: Theme.of(context).colorScheme.primary),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter the city or country';
+        Autocomplete<String>(
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return const Iterable<String>.empty();
             }
-            return null;
+            return LocationConstants.pakistanCities.where((String city) {
+              return city.toLowerCase().contains(textEditingValue.text.toLowerCase());
+            });
+          },
+          onSelected: (String selection) {
+            _cityController.text = selection;
+          },
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            if (controller.text.isEmpty && _cityController.text.isNotEmpty) {
+              controller.text = _cityController.text;
+            }
+            controller.addListener(() {
+              _cityController.text = controller.text;
+            });
+
+            return TextFormField(
+              controller: controller,
+              focusNode: focusNode,
+              onFieldSubmitted: (value) => onFieldSubmitted(),
+              decoration: InputDecoration(
+                labelText: 'City',
+                hintText: 'e.g., Lahore, Karachi, Islamabad',
+                prefixIcon: Icon(Icons.location_city_outlined, color: Theme.of(context).colorScheme.primary),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter the city name';
+                }
+                return null;
+              },
+            );
           },
         ),
       ],
@@ -435,41 +453,86 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Widget _buildPrivacySettings() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Privacy',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Privacy',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildPrivacyOption(
+              PostPrivacy.public,
+              Icons.public,
+              'Public',
+              'Anyone can see this post',
+            ),
+            const SizedBox(width: 12),
+            _buildPrivacyOption(
+              PostPrivacy.private,
+              Icons.lock_outline,
+              'Private',
+              'Only you can see this',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrivacyOption(PostPrivacy value, IconData icon, String label, String subtitle) {
+    final isSelected = _privacy == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _privacy = value),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
-          const SizedBox(height: 12),
-          RadioListTile<PostPrivacy>(
-            value: PostPrivacy.public,
-            groupValue: _privacy,
-            onChanged: (value) => setState(() => _privacy = value!),
-            title: const Text('Public'),
-            subtitle: const Text('Everyone can see this post'),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                icon,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.onPrimaryContainer
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          RadioListTile<PostPrivacy>(
-            value: PostPrivacy.friends,
-            groupValue: _privacy,
-            onChanged: (value) => setState(() => _privacy = value!),
-            title: const Text('Friends Only'),
-            subtitle: const Text('Only your friends can see this post'),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -478,59 +541,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.verified_user,
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'AI Verification',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Your image will be verified using AI to ensure it shows a travel destination, monument, or historical place. Only verified posts are accepted.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
+          Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Our AI will verify if your photo is a valid travel destination or monument.',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ),
-          if (_isVerifying)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Verifying image...',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );

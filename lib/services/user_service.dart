@@ -9,28 +9,16 @@ class UserService {
 
   static Future<User?> getCurrentUser() async {
     final firebaseUser = _auth.currentUser;
-    if (firebaseUser == null) {
-      debugPrint('No user currently logged in to Firebase Auth.');
-      return null;
-    }
+    if (firebaseUser == null) return null;
     return await getUserById(firebaseUser.uid);
   }
 
   static Future<User?> getUserById(String id) async {
     try {
-      debugPrint('Fetching user document for ID: $id');
       final doc = await _firestore.collection('users').doc(id).get();
-      
-      if (doc.exists) {
-        debugPrint('User document found in Firestore.');
-        return User.fromJson(doc.data()!);
-      } else {
-        debugPrint('CRITICAL: User document NOT found in Firestore for ID: $id');
-        return null;
-      }
+      if (doc.exists) return User.fromJson(doc.data()!);
+      return null;
     } catch (e) {
-      debugPrint('[Firestore Error] getUserById failed: $e');
-      // Rethrow to let the UI know an actual error occurred vs just "not found"
       rethrow; 
     }
   }
@@ -42,25 +30,15 @@ class UserService {
           .where('username', isEqualTo: username.toLowerCase())
           .limit(1)
           .get();
-      
-      if (query.docs.isNotEmpty) {
-        return User.fromJson(query.docs.first.data());
-      }
+      if (query.docs.isNotEmpty) return User.fromJson(query.docs.first.data());
       return null;
     } catch (e) {
-      debugPrint('[Firestore Error] getUserByUsername failed: $e');
       return null;
     }
   }
 
   static Future<void> createUser(User user) async {
-    try {
-      await _firestore.collection('users').doc(user.id).set(user.toJson());
-      debugPrint('Successfully saved user profile to Firestore.');
-    } catch (e) {
-      debugPrint('[Firestore Error] createUser failed: $e');
-      rethrow;
-    }
+    await _firestore.collection('users').doc(user.id).set(user.toJson());
   }
 
   static Future<User?> register({
@@ -71,68 +49,32 @@ class UserService {
     String? bio,
     String? location,
   }) async {
-    try {
-      final existingUser = await getUserByUsername(username);
-      if (existingUser != null) {
-        throw Exception('Username already taken');
-      }
+    final userCredential = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    final firebaseUser = userCredential.user;
+    if (firebaseUser == null) throw Exception('Registration failed');
 
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+    final user = User(
+      id: firebaseUser.uid,
+      username: username.toLowerCase(),
+      email: email,
+      displayName: displayName,
+      bio: bio,
+      location: location,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
 
-      final firebaseUser = userCredential.user;
-      if (firebaseUser == null) throw Exception('Registration failed');
-
-      try {
-        final user = User(
-          id: firebaseUser.uid,
-          username: username.toLowerCase(),
-          email: email,
-          displayName: displayName,
-          bio: bio,
-          location: location,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-
-        await createUser(user);
-        return user;
-      } catch (e) {
-        debugPrint('[Firestore Error] Saving user profile failed: $e');
-        await firebaseUser.delete();
-        throw Exception('Database Error: Profile could not be saved. Check Firestore rules in Console.');
-      }
-    } on auth.FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        throw Exception('User with this email already exists');
-      }
-      throw Exception(e.message ?? 'Registration failed');
-    } catch (e) {
-      rethrow;
-    }
+    await createUser(user);
+    return user;
   }
 
   static Future<User?> login(String email, String password) async {
-    try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
-      if (userCredential.user != null) {
-        return await getUserById(userCredential.user!.uid);
-      }
-      return null;
-    } on auth.FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Login failed');
-    }
+    final userCredential = await _auth.signInWithEmailAndPassword(email: email, password: password);
+    if (userCredential.user != null) return await getUserById(userCredential.user!.uid);
+    return null;
   }
 
-  static Future<void> logout() async {
-    await _auth.signOut();
-  }
+  static Future<void> logout() async => await _auth.signOut();
 
   static Future<void> resetPassword(String email) async {
     try {
@@ -142,96 +84,48 @@ class UserService {
     }
   }
 
-  static Future<User> updateUser(User user) async {
+  // Mukammal Change Password Method
+  static Future<void> changePassword(String currentPassword, String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) throw Exception('User not logged in');
+
     try {
-      final updatedUser = user.copyWith(updatedAt: DateTime.now());
-      await _firestore.collection('users').doc(user.id).update(updatedUser.toJson());
-      return updatedUser;
-    } catch (e) {
-      throw Exception('Failed to update profile: $e');
+      // 1. Re-authenticate user
+      auth.AuthCredential credential = auth.EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+
+      // 2. Update password
+      await user.updatePassword(newPassword);
+    } on auth.FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        throw Exception('Current password is incorrect');
+      }
+      throw Exception(e.message ?? 'Failed to change password');
     }
+  }
+
+  static Future<User> updateUser(User user) async {
+    final updatedUser = user.copyWith(updatedAt: DateTime.now());
+    await _firestore.collection('users').doc(user.id).update(updatedUser.toJson());
+    return updatedUser;
   }
 
   static Future<List<User>> searchUsers(String query, {String? excludeUserId}) async {
-    final trimmed = query.trim();
+    final trimmed = query.trim().toLowerCase();
     if (trimmed.isEmpty) return [];
-
-    try {
-      final String queryLower = trimmed.toLowerCase();
-      final List<User> results = [];
-      final Set<String> seenUserIds = {};
-
-      // Helper to add users while avoiding duplicates and excluded IDs..
-      void addUsersFromSnapshot(QuerySnapshot<Map<String, dynamic>> snapshot) {
-        for (final doc in snapshot.docs) {
-          final data = doc.data();
-          final map = Map<String, dynamic>.from(data);
-          if ((map['id'] ?? '').toString().isEmpty) map['id'] = doc.id;
-          final user = User.fromJson(map);
-          if (user.id == excludeUserId) continue;
-          if (seenUserIds.contains(user.id)) continue;
-          seenUserIds.add(user.id);
-          results.add(user);
-        }
-      }
-
-      // 1) Search by username (case-insensitive prefix using stored lowercase usernames)
-      final usernameSnapshot = await _firestore
-          .collection('users')
-          .where('username', isGreaterThanOrEqualTo: queryLower)
-          .where('username', isLessThanOrEqualTo: '$queryLower\uf8ff')
-          .get();
-      addUsersFromSnapshot(usernameSnapshot);
-
-      // 2) Search by display name (prefix match, case-sensitive since displayName is stored as-is)
-      final displayNameSnapshot = await _firestore
-          .collection('users')
-          .where('displayName', isGreaterThanOrEqualTo: trimmed)
-          .where('displayName', isLessThanOrEqualTo: '$trimmed\uf8ff')
-          .get();
-      addUsersFromSnapshot(displayNameSnapshot);
-
-      // 3) Search by exact user ID (document ID)
-      final userIdSnapshot = await _firestore
-          .collection('users')
-          .where(FieldPath.documentId, isEqualTo: trimmed)
-          .get();
-      addUsersFromSnapshot(userIdSnapshot);
-      
-      // Final in-memory filter so partial name also works (case-insensitive)..
-      final filtered = results.where((user) {
-        final display = user.displayName.toLowerCase();
-        final username = user.username.toLowerCase();
-        return display.contains(queryLower) ||
-            username.contains(queryLower) ||
-            user.id.contains(trimmed);
-      }).toList();
-
-      return filtered;
-    } catch (e) {
-      debugPrint('[Firestore Error] searchUsers failed: $e');
-      return [];
-    }
+    final snapshot = await _firestore.collection('users')
+        .where('username', isGreaterThanOrEqualTo: trimmed)
+        .where('username', isLessThanOrEqualTo: '$trimmed\uf8ff')
+        .get();
+    return snapshot.docs.map((doc) => User.fromJson(doc.data())).where((u) => u.id != excludeUserId).toList();
   }
 
   static Future<List<User>> getSuggestedUsers(String currentUserId, {int limit = 10}) async {
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .where(FieldPath.documentId, isNotEqualTo: currentUserId)
-          .limit(limit)
-          .get();
-
-      final users = <User>[];
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final map = Map<String, dynamic>.from(data);
-        if ((map['id'] ?? '').toString().isEmpty) map['id'] = doc.id;
-        users.add(User.fromJson(map));
-      }
-      return users;
-    } catch (e) {
-      return [];
-    }
+    final snapshot = await _firestore.collection('users').limit(limit).get();
+    return snapshot.docs.map((doc) => User.fromJson(doc.data())).where((u) => u.id != currentUserId).toList();
   }
 }

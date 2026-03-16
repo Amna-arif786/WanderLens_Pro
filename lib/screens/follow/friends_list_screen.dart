@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/services/friend_service.dart';
+import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 
 import '../../responsive/constrained_scaffold.dart';
 
-/// Shows current user's friends list with unfriend option..
 class FriendsListScreen extends StatefulWidget {
   final String currentUserId;
   final String currentUserDisplayName;
   final VoidCallback? onFriendsChanged;
+  final bool showAppBar;
 
   const FriendsListScreen({
     super.key,
     required this.currentUserId,
     required this.currentUserDisplayName,
     this.onFriendsChanged,
+    this.showAppBar = true,
   });
 
   @override
@@ -43,7 +45,6 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading friends: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -52,188 +53,146 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Unfriend'),
-        content: Text(
-          'Remove ${friend.displayName} from your friends?',
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Remove Friend?'),
+        content: Text('Are you sure you want to unfriend ${friend.displayName}?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Unfriend'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true || !mounted) return;
-
-    try {
+    if (confirmed == true) {
       await FriendService.removeFriend(widget.currentUserId, friend.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${friend.displayName} removed from friends')),
-        );
-        _loadFriends();
-        widget.onFriendsChanged?.call();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to unfriend: $e')),
-        );
-      }
+      _loadFriends();
+      widget.onFriendsChanged?.call();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.showAppBar) return _buildBody();
+
     return ConstrainedScaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: const Color(0xFFF8F9FA), // Soft background
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
+        title: const Text(
           'Friends',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
         ),
       ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            )
-          : _friends.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 80,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.3),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'No friends yet',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Search for users in Explore to add friends',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.6),
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  itemCount: _friends.length,
-                  itemBuilder: (context, index) {
-                    final friend = _friends[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withValues(alpha: 0.1),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          UserAvatar(
-                            imageUrl: friend.profileImageUrl,
-                            size: 50,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      friend.displayName,
-                                      style:
-                                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (friend.isVerified) ...[
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.verified,
-                                        size: 16,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '@${friend.username}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          OutlinedButton(
-                            onPressed: () => _unfriend(friend),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Theme.of(context).colorScheme.error,
-                              side: BorderSide(
-                                color: Theme.of(context).colorScheme.error.withValues(alpha: 0.6),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            child: const Text('Unfriend'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    if (_friends.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 100, color: Colors.grey.withOpacity(0.3)),
+            const SizedBox(height: 20),
+            const Text('No friends yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const Text('Start connecting with travelers!', style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        // Friends Count Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '${_friends.length} Friends',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blueGrey),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _friends.length,
+            itemBuilder: (context, index) {
+              final friend = _friends[index];
+              return _buildFriendCard(friend);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFriendCard(User friend) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: friend.id))),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.blue.withOpacity(0.1), width: 3),
                 ),
+                child: UserAvatar(imageUrl: friend.profileImageUrl, size: 55),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      friend.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      '@${friend.username}',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton(
+                onPressed: () => _unfriend(friend),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                child: const Text('Unfriend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/models/friend_request.dart';
 import 'package:wanderlens/services/friend_service.dart';
 import 'package:wanderlens/services/user_service.dart';
+import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 
 class UserCard extends StatefulWidget {
@@ -153,103 +154,113 @@ class _UserCardState extends State<UserCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfileScreen(userId: widget.user.id),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            UserAvatar(
-              imageUrl: widget.user.profileImageUrl,
-              size: 56,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          widget.user.displayName,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (widget.user.isVerified) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.verified,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '@${widget.user.username}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                  ),
-                  if (widget.user.bio != null &&
-                      widget.user.bio!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.user.bio!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (widget.user.location != null &&
-                      widget.user.location!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              UserAvatar(
+                imageUrl: widget.user.profileImageUrl,
+                size: 56,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.location_on,
-                          size: 12,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.5),
+                        Flexible(
+                          child: Text(
+                            widget.user.displayName,
+                            style:
+                                Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.user.location!,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                        ),
+                        if (widget.user.isVerified) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.verified,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@${widget.user.username}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                    ),
+                    if (widget.user.bio != null &&
+                        widget.user.bio!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.user.bio!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (widget.user.location != null &&
+                        widget.user.location!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.user.location!,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _buildActionButton(),
-          ],
+              const SizedBox(width: 8),
+              _buildActionButton(),
+            ],
+          ),
         ),
       ),
     );
