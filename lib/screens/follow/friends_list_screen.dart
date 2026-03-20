@@ -3,7 +3,6 @@ import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/services/friend_service.dart';
 import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
-
 import '../../responsive/constrained_scaffold.dart';
 
 class FriendsListScreen extends StatefulWidget {
@@ -35,6 +34,7 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   }
 
   Future<void> _loadFriends() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final friends = await FriendService.getFriends(widget.currentUserId);
@@ -50,17 +50,26 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   }
 
   Future<void> _unfriend(User friend) async {
+    final colorScheme = Theme.of(context).colorScheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Remove Friend?'),
-        content: Text('Are you sure you want to unfriend ${friend.displayName}?'),
+        title: Text('Remove Friend?', style: TextStyle(color: colorScheme.onSurface)),
+        content: Text(
+          'Are you sure you want to unfriend ${friend.displayName}?',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel', style: TextStyle(color: colorScheme.primary))
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: colorScheme.error),
             child: const Text('Unfriend'),
           ),
         ],
@@ -76,21 +85,28 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (!widget.showAppBar) return _buildBody();
 
     return ConstrainedScaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Soft background
+      // Dynamic background color
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Colors.black),
+          icon: Icon(Icons.arrow_back_ios_new, size: 20, color: colorScheme.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Friends',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20),
+          style: TextStyle(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.bold,
+              fontSize: 20
+          ),
         ),
       ),
       body: _buildBody(),
@@ -98,6 +114,8 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   }
 
   Widget _buildBody() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     if (_friends.isEmpty) {
@@ -105,10 +123,16 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 100, color: Colors.grey.withOpacity(0.3)),
+            Icon(Icons.people_outline, size: 100, color: colorScheme.primary.withOpacity(0.2)),
             const SizedBox(height: 20),
-            const Text('No friends yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey)),
-            const Text('Start connecting with travelers!', style: TextStyle(color: Colors.grey)),
+            Text(
+                'No friends yet',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface)
+            ),
+            Text(
+                'Start connecting with travelers!',
+                style: TextStyle(color: colorScheme.onSurfaceVariant)
+            ),
           ],
         ),
       );
@@ -122,7 +146,11 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
           alignment: Alignment.centerLeft,
           child: Text(
             '${_friends.length} Friends',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blueGrey),
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: colorScheme.primary
+            ),
           ),
         ),
         Expanded(
@@ -140,17 +168,32 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   }
 
   Widget _buildFriendCard(User friend) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        // Card color automatically adjusts
+        color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: colorScheme.outlineVariant.withOpacity(isDark ? 0.2 : 0.5)
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark)
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4)
+            ),
         ],
       ),
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: friend.id))),
+        onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => ProfileScreen(userId: friend.id))
+        ),
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -159,7 +202,7 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.blue.withOpacity(0.1), width: 3),
+                  border: Border.all(color: colorScheme.primary.withOpacity(0.2), width: 3),
                 ),
                 child: UserAvatar(imageUrl: friend.profileImageUrl, size: 55),
               ),
@@ -170,24 +213,35 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
                   children: [
                     Text(
                       friend.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: colorScheme.onSurface
+                      ),
                     ),
                     Text(
                       '@${friend.username}',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 13
+                      ),
                     ),
                   ],
                 ),
               ),
+              // Professional Red Outlined Button for Unfriend
               OutlinedButton(
                 onPressed: () => _unfriend(friend),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+                  foregroundColor: colorScheme.error,
+                  side: BorderSide(color: colorScheme.error.withOpacity(0.4)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
-                child: const Text('Unfriend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: const Text(
+                    'Unfriend',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
+                ),
               ),
             ],
           ),

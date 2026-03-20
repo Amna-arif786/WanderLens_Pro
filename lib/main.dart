@@ -31,10 +31,17 @@ class WanderLensApp extends StatelessWidget {
     return MaterialApp(
       title: 'WanderLens - Travel Social Media',
       debugShowCheckedModeBanner: false,
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      // Switching between Light and Dark modes based on user preference..
-      themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        theme: ThemeData(
+          useMaterial3: true,
+          colorSchemeSeed: Colors.teal, //  primary color
+          brightness: Brightness.light,
+        ),
+        darkTheme: ThemeData(
+          useMaterial3: true,
+          colorSchemeSeed: Colors.teal,
+          brightness: Brightness.dark,
+        ),
       home: const SplashScreen(),
     );
   }

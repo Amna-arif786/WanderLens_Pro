@@ -72,6 +72,9 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(widget.post.userId).snapshots(),
       builder: (context, snapshot) {
@@ -83,16 +86,25 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            // Dark mode mein surfaceContainer (soft black) aur light mein pure white
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withOpacity(isDark ? 0.2 : 0.5),
+            ),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 5)),
+              if (!isDark) // Shadows sirf light mode mein acchi lagti hain
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5)
+                ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header Section
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
@@ -102,8 +114,8 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle, 
-                          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.2), width: 2)
+                            shape: BoxShape.circle,
+                            border: Border.all(color: colorScheme.primary.withOpacity(0.2), width: 2)
                         ),
                         child: UserAvatar(imageUrl: author?.profileImageUrl ?? widget.post.userProfileImage, size: 38),
                       ),
@@ -115,14 +127,27 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(author?.displayName ?? widget.post.userDisplayName ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            Text(
+                                author?.displayName ?? widget.post.userDisplayName ?? 'User',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: colorScheme.onSurface // Black in light, White in dark
+                                )
+                            ),
                             Row(
                               children: [
-                                Icon(Icons.place, size: 12, color: Theme.of(context).colorScheme.primary),
+                                Icon(Icons.place, size: 12, color: colorScheme.primary),
                                 const SizedBox(width: 2),
-                                Text('${widget.post.location}, ${widget.post.cityName}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                                Text(
+                                    '${widget.post.location}, ${widget.post.cityName}',
+                                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)
+                                ),
                                 const SizedBox(width: 8),
-                                Text('• ${_getTimeAgo(widget.post.createdAt)}', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                                Text(
+                                    '• ${_getTimeAgo(widget.post.createdAt)}',
+                                    style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant.withOpacity(0.7))
+                                ),
                               ],
                             ),
                           ],
@@ -132,45 +157,60 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
-              // Post Image - Changed to show full image without cropping
+
+              // Image Section
               GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: widget.post, currentUserId: widget.currentUserId))),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Image.network(
-                    widget.post.imageUrl, 
-                    width: double.infinity, 
-                    fit: BoxFit.contain, // Shows full image without cropping
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 300,
-                        color: Colors.grey[100],
-                        child: const Center(child: CircularProgressIndicator()),
-                      );
-                    },
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => PostDetailScreen(post: widget.post, currentUserId: widget.currentUserId))
+                ),
+                child: Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 450, minHeight: 250),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Image.network(
+                      widget.post.imageUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover, // Use cover for professional feed look
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 300,
+                          color: colorScheme.surfaceContainerHighest,
+                          child: const Center(child: CircularProgressIndicator()),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
+
               // Action Buttons
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border, color: _isLiked ? Colors.red : Colors.black87),
+                      icon: Icon(
+                          _isLiked ? Icons.favorite : Icons.favorite_border,
+                          color: _isLiked ? Colors.red : colorScheme.onSurface
+                      ),
                       onPressed: () async {
                         setState(() => _isLiked = !_isLiked);
                         await LikeService.toggleLike(widget.post.id, widget.currentUserId);
                       },
                     ),
                     IconButton(
-                      icon: const Icon(Icons.mode_comment_outlined, color: Colors.black87),
+                      icon: Icon(Icons.mode_comment_outlined, color: colorScheme.onSurface),
                       onPressed: _showComments,
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? Colors.blue : Colors.black87),
+                      icon: Icon(
+                          _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                          color: _isSaved ? colorScheme.primary : colorScheme.onSurface
+                      ),
                       onPressed: () async {
                         setState(() => _isSaved = !_isSaved);
                         await WishlistService.toggleWishlist(widget.post.id, widget.currentUserId);
@@ -180,6 +220,7 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
+
               // Caption & Likes Section
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -188,29 +229,37 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   children: [
                     Text(
                       '${widget.post.likeCount} likes',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: colorScheme.onSurface
+                      ),
                     ),
                     const SizedBox(height: 6),
                     RichText(
                       text: TextSpan(
-                        style: const TextStyle(color: Colors.black87, fontSize: 14),
+                        style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
                         children: [
                           WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
                             child: GestureDetector(
                               onTap: () => _navigateToProfile(context, widget.post.userId),
-                              child: Text('${author?.username ?? widget.post.username}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text(
+                                  '${author?.username ?? widget.post.username}  ',
+                                  style: const TextStyle(fontWeight: FontWeight.bold)
+                              ),
                             ),
                           ),
                           TextSpan(text: widget.post.caption),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     GestureDetector(
                       onTap: _showComments,
                       child: Text(
                         'View all comments',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13),
                       ),
                     ),
                   ],

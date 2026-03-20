@@ -33,7 +33,7 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  Post? _editedPost; 
+  Post? _editedPost;
   User? _postAuthor;
   List<Comment> _comments = [];
   bool _isLiked = false;
@@ -68,7 +68,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Future<void> _loadPostDetails() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     try {
       final author = await UserService.getUserById(_displayPost.userId);
       final comments = await CommentService.getCommentsByPostId(_displayPost.id);
@@ -86,6 +86,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Privacy Icon Helper
+  IconData _getPrivacyIcon(PostPrivacy privacy) {
+    switch (privacy) {
+      case PostPrivacy.public: return Icons.public;
+      case PostPrivacy.friends: return Icons.group;
+      case PostPrivacy.private: return Icons.lock;
+      default: return Icons.public;
+    }
+  }
+
+  // Privacy Text Helper
+  String _getPrivacyText(PostPrivacy privacy) {
+    switch (privacy) {
+      case PostPrivacy.public: return "Public";
+      case PostPrivacy.friends: return "Friends";
+      case PostPrivacy.private: return "Only Me";
+      default: return "Public";
     }
   }
 
@@ -159,72 +179,119 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final captionController = TextEditingController(text: _displayPost.caption);
     final locationController = TextEditingController(text: _displayPost.location);
     final cityController = TextEditingController(text: _displayPost.cityName);
-    
+
+    // Database value to string for dropdown
+    String selectedPrivacyString = _displayPost.privacy.toString().split('.').last;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Post'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: captionController,
-                decoration: const InputDecoration(labelText: 'Caption'),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: locationController,
-                decoration: const InputDecoration(labelText: 'Location/Monument'),
-              ),
-              const SizedBox(height: 12),
-              Autocomplete<String>(
-                initialValue: TextEditingValue(text: _displayPost.cityName),
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  if (textEditingValue.text.isEmpty) {
-                    return const Iterable<String>.empty();
-                  }
-                  return LocationConstants.pakistanCities.where((String city) {
-                    return city.toLowerCase().contains(textEditingValue.text.toLowerCase());
-                  });
-                },
-                onSelected: (String selection) {
-                  cityController.text = selection;
-                },
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  return TextFormField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    onFieldSubmitted: (value) => onFieldSubmitted(),
-                    decoration: const InputDecoration(
-                      labelText: 'City',
-                      hintText: 'e.g., Lahore, Karachi',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Post'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: captionController,
+                  decoration: const InputDecoration(labelText: 'Caption'),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: locationController,
+                  decoration: const InputDecoration(labelText: 'Location/Monument'),
+                ),
+                const SizedBox(height: 12),
+                Autocomplete<String>(
+                  initialValue: TextEditingValue(text: _displayPost.cityName),
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<String>.empty();
+                    }
+                    return LocationConstants.pakistanCities.where((String city) {
+                      return city.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  onSelected: (String selection) {
+                    cityController.text = selection;
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onFieldSubmitted: (value) => onFieldSubmitted(),
+                      decoration: const InputDecoration(
+                        labelText: 'City',
+                        hintText: 'e.g., Lahore, Karachi',
+                      ),
+                      onChanged: (value) => cityController.text = value,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                DropdownButtonFormField<String>(
+                  value: selectedPrivacyString,
+                  decoration: const InputDecoration(
+                    labelText: 'Who can see this?',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.security),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'public',
+                        child: Row(children: [Icon(Icons.public, size: 18), SizedBox(width: 8), Text('Public')])
                     ),
-                    onChanged: (value) => cityController.text = value,
-                  );
-                },
-              ),
-            ],
+                    DropdownMenuItem(
+                        value: 'friends',
+                        child: Row(children: [Icon(Icons.group, size: 18), SizedBox(width: 8), Text('Friends Only')])
+                    ),
+                    DropdownMenuItem(
+                        value: 'private',
+                        child: Row(children: [Icon(Icons.lock, size: 18), SizedBox(width: 8), Text('Only Me')])
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedPrivacyString = value!;
+                    });
+                  },
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () async {
+                PostPrivacy finalPrivacy;
+                if (selectedPrivacyString == 'public') {
+                  finalPrivacy = PostPrivacy.public;
+                } else if (selectedPrivacyString == 'friends') {
+                  finalPrivacy = PostPrivacy.friends;
+                } else {
+                  finalPrivacy = PostPrivacy.private;
+                }
+
+                final updatedPost = _displayPost.copyWith(
+                  caption: captionController.text.trim(),
+                  location: locationController.text.trim(),
+                  cityName: cityController.text.trim(),
+                  privacy: finalPrivacy,
+                );
+
+                await PostService.updatePost(updatedPost);
+                setState(() => _editedPost = updatedPost);
+                if (mounted) {
+                  Navigator.pop(context);
+                  widget.onPostUpdated?.call();
+                }
+              },
+              child: const Text('Update'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              final updatedPost = _displayPost.copyWith(
-                caption: captionController.text.trim(),
-                location: locationController.text.trim(),
-                cityName: cityController.text.trim(),
-              );
-              await PostService.updatePost(updatedPost);
-              setState(() => _editedPost = updatedPost);
-              Navigator.pop(context);
-              widget.onPostUpdated?.call();
-            },
-            child: const Text('Update'),
-          ),
-        ],
       ),
     );
   }
@@ -250,7 +317,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       await PostService.deletePost(_displayPost.id);
       if (mounted) {
         widget.onPostUpdated?.call();
-        Navigator.pop(context); 
+        Navigator.pop(context);
       }
     }
   }
@@ -337,22 +404,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(0),
               children: [
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(0),
-                    children: [
-                      _buildPostHeader(),
-                      _buildPostImage(),
-                      _buildActionButtons(),
-                      const Divider(),
-                      _buildCommentsList(),
-                    ],
-                  ),
-                ),
-                _buildCommentInput(),
+                _buildPostHeader(),
+                _buildPostImage(),
+                _buildActionButtons(),
+                const Divider(),
+                _buildCommentsList(),
               ],
             ),
+          ),
+          _buildCommentInput(),
+        ],
+      ),
     );
   }
 
@@ -362,14 +429,39 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         onTap: () => _navigateToProfile(_displayPost.userId),
         child: UserAvatar(imageUrl: _postAuthor?.profileImageUrl, size: 40),
       ),
-      title: GestureDetector(
-        onTap: () => _navigateToProfile(_displayPost.userId),
-        child: Text(_postAuthor?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+      title: Row(
+        children: [
+          GestureDetector(
+            onTap: () => _navigateToProfile(_displayPost.userId),
+            child: Text(_postAuthor?.displayName ?? '',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 8),
+          // Privacy Icon next to name
+          Icon(_getPrivacyIcon(_displayPost.privacy), size: 14, color: Colors.grey),
+        ],
       ),
-      subtitle: Text('📍 ${_displayPost.location}, ${_displayPost.cityName}', style: const TextStyle(fontSize: 12)),
-      trailing: Text(
-        DateFormat('MMM dd').format(_displayPost.createdAt),
-        style: const TextStyle(color: Colors.grey, fontSize: 12),
+      subtitle: Text('📍 ${_displayPost.location}, ${_displayPost.cityName}',
+          style: const TextStyle(fontSize: 12)),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            DateFormat('MMM dd').format(_displayPost.createdAt),
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
+          // Privacy Text status
+          Text(
+            _getPrivacyText(_displayPost.privacy),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -390,13 +482,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             children: [
               IconButton(
                 onPressed: _toggleLike,
-                icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border, color: _isLiked ? Colors.red : null),
+                icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: _isLiked ? Colors.red : null),
               ),
               const Text('Like', style: TextStyle(fontWeight: FontWeight.w500)),
               const Spacer(),
               IconButton(
                 onPressed: _toggleSave,
-                icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? Colors.blue : null),
+                icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border,
+                    color: _isSaved ? Colors.blue : null),
               ),
             ],
           ),
@@ -416,7 +510,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   WidgetSpan(
                     child: GestureDetector(
                       onTap: () => _navigateToProfile(_displayPost.userId),
-                      child: Text('${_postAuthor?.username ?? ""} ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text('${_postAuthor?.username ?? ""} ',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   TextSpan(text: _displayPost.caption),
@@ -435,12 +530,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Text('Comments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          child: Text('Comments',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
         if (_comments.isEmpty)
           const Padding(
             padding: EdgeInsets.all(32.0),
-            child: Center(child: Text('No comments yet. Be the first!', style: TextStyle(color: Colors.grey))),
+            child: Center(
+                child: Text('No comments yet. Be the first!',
+                    style: TextStyle(color: Colors.grey))),
           ),
         ListView.builder(
           shrinkWrap: true,
@@ -470,7 +568,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               onTap: () => _navigateToProfile(comment.userId),
                               child: Text(
                                 user?.username ?? '...',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -510,7 +609,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
       ),
       child: Row(
         children: [

@@ -1,14 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:wanderlens/models/post.dart';
 import 'package:wanderlens/services/user_service.dart';
+import 'package:wanderlens/services/friend_service.dart';
 
 class PostService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static Future<List<Post>> getAllPosts() async {
+  static Future<List<Post>> getAllPosts({String? viewerId}) async {
     try {
       final snapshot = await _firestore.collection('posts').get();
-      return snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      final allPosts = snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      
+      if (viewerId == null) {
+        return allPosts.where((p) => p.privacy == PostPrivacy.public).toList();
+      }
+
+      // In a real app, this should be a more efficient query or handle friends list
+      List<Post> filteredPosts = [];
+      for (var post in allPosts) {
+        if (post.userId == viewerId || post.privacy == PostPrivacy.public) {
+          filteredPosts.add(post);
+        } else if (post.privacy == PostPrivacy.friends) {
+          bool areFriends = await FriendService.areUsersFriends(viewerId, post.userId);
+          if (areFriends) filteredPosts.add(post);
+        }
+      }
+      return filteredPosts;
     } catch (e) {
       return [];
     }
@@ -26,34 +43,58 @@ class PostService {
     }
   }
 
-  static Future<List<Post>> getPostsByUserId(String userId) async {
+  static Future<List<Post>> getPostsByUserId(String userId, {String? viewerId}) async {
     try {
       final snapshot = await _firestore
           .collection('posts')
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
           .get();
-      return snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      
+      final posts = snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      
+      bool isOwner = viewerId == userId;
+      bool areFriends = false;
+      if (!isOwner && viewerId != null) {
+        areFriends = await FriendService.areUsersFriends(userId, viewerId);
+      }
+
+      final filteredPosts = posts.where((post) {
+        if (isOwner) return true;
+        if (post.privacy == PostPrivacy.public) return true;
+        if (post.privacy == PostPrivacy.friends && areFriends) return true;
+        return false;
+      }).toList();
+
+      filteredPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return filteredPosts;
     } catch (e) {
-      final snapshot = await _firestore
-          .collection('posts')
-          .where('userId', isEqualTo: userId)
-          .get();
-      return snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      return [];
     }
   }
 
-  static Stream<List<Post>> getPostsStreamByUserId(String userId) {
-    // Simple stream without orderBy to avoid index issues for now
+  static Stream<List<Post>> getPostsStreamByUserId(String userId, {String? viewerId}) {
     return _firestore
         .collection('posts')
         .where('userId', isEqualTo: userId)
         .snapshots()
-        .map((snapshot) {
+        .asyncMap((snapshot) async {
           final posts = snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
-          // Sort in memory to avoid needing a Firestore index
-          posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return posts;
+          
+          bool isOwner = viewerId == userId;
+          bool areFriends = false;
+          if (!isOwner && viewerId != null) {
+            areFriends = await FriendService.areUsersFriends(userId, viewerId);
+          }
+
+          final filteredPosts = posts.where((post) {
+            if (isOwner) return true;
+            if (post.privacy == PostPrivacy.public) return true;
+            if (post.privacy == PostPrivacy.friends && areFriends) return true;
+            return false;
+          }).toList();
+
+          filteredPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return filteredPosts;
         });
   }
 
@@ -64,11 +105,18 @@ class PostService {
           .orderBy('createdAt', descending: true)
           .get();
       
-      final posts = snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
+      final allPosts = snapshot.docs.map((doc) => Post.fromJson(doc.data())).toList();
       
-      return posts.where((post) => 
-        post.privacy == PostPrivacy.public || post.userId == currentUserId
-      ).toList();
+      // Get following to check for friends-only posts
+      final following = await FriendService.getFollowing(currentUserId);
+      final followingIds = following.map((u) => u.id).toSet();
+
+      return allPosts.where((post) {
+        if (post.userId == currentUserId) return true;
+        if (post.privacy == PostPrivacy.public) return true;
+        if (post.privacy == PostPrivacy.friends && followingIds.contains(post.userId)) return true;
+        return false;
+      }).toList();
     } catch (e) {
       return [];
     }

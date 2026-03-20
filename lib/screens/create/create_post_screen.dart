@@ -469,14 +469,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               PostPrivacy.public,
               Icons.public,
               'Public',
-              'Anyone can see this post',
+              'Anyone',
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
+            _buildPrivacyOption(
+              PostPrivacy.friends,
+              Icons.group_outlined,
+              'Friends',
+              'Friends only',
+            ),
+            const SizedBox(width: 8),
             _buildPrivacyOption(
               PostPrivacy.private,
               Icons.lock_outline,
+              'Only Me',
               'Private',
-              'Only you can see this',
             ),
           ],
         ),
@@ -490,7 +497,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       child: GestureDetector(
         onTap: () => setState(() => _privacy = value),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
             color: isSelected
                 ? Theme.of(context).colorScheme.primaryContainer
@@ -503,7 +510,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             ),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
@@ -516,6 +523,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                   color: isSelected
                       ? Theme.of(context).colorScheme.primary
                       : Theme.of(context).colorScheme.onSurface,

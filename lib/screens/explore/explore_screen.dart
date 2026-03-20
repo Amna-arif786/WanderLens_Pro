@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:wanderlens/models/post.dart';
 import 'package:wanderlens/models/user.dart';
-import 'package:wanderlens/services/post_service.dart';
 import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/widgets/post_card.dart';
 import 'package:wanderlens/widgets/user_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../../responsive/constrained_scaffold.dart';
 
 enum _ExploreTab { posts, users }
@@ -44,7 +42,6 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     try {
       _currentUser = await UserService.getCurrentUser();
       if (_currentUser != null) {
-        // Fetch top/suggested users
         _suggestedUsers = await UserService.getSuggestedUsers(_currentUser!.id, limit: 15);
       }
       if (mounted) setState(() {});
@@ -81,12 +78,21 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return ConstrainedScaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      // Hardcoded color ki jagah theme ka surface color
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colorScheme.surface,
         elevation: 0,
-        title: const Text('Explore', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: Text(
+            'Explore',
+            style: TextStyle(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.bold
+            )
+        ),
       ),
       body: Column(
         children: [
@@ -95,8 +101,8 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              child: _selectedTab == _ExploreTab.posts 
-                  ? _buildPostSearchContent() 
+              child: _selectedTab == _ExploreTab.posts
+                  ? _buildPostSearchContent()
                   : _buildUserSearchContent(),
             ),
           ),
@@ -106,32 +112,35 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   }
 
   Widget _buildSearchBar() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        // Dark mode mein halka grey/navy black box professional lagta hai
+        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.3)),
       ),
       child: TextField(
         controller: _searchController,
+        style: TextStyle(color: colorScheme.onSurface),
         decoration: InputDecoration(
-          hintText: _selectedTab == _ExploreTab.posts 
-              ? 'Search locations (e.g. Hunza)...' 
+          hintText: _selectedTab == _ExploreTab.posts
+              ? 'Search locations (e.g. Hunza)...'
               : 'Search travelers...',
-          prefixIcon: const Icon(Icons.search, color: Colors.grey),
-          suffixIcon: _searchQuery.isNotEmpty 
+          hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+          prefixIcon: Icon(Icons.search, color: colorScheme.primary),
+          suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.grey),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                    if (_selectedTab == _ExploreTab.users) _searchUsers('');
-                  },
-                )
+            icon: Icon(Icons.clear, color: colorScheme.onSurfaceVariant),
+            onPressed: () {
+              _searchController.clear();
+              setState(() => _searchQuery = '');
+              if (_selectedTab == _ExploreTab.users) _searchUsers('');
+            },
+          )
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 15),
@@ -161,6 +170,8 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
 
   Widget _buildTab(_ExploreTab tab, String label, IconData icon) {
     final isSelected = _selectedTab == tab;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Expanded(
       child: InkWell(
         onTap: () {
@@ -173,19 +184,25 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? Theme.of(context).colorScheme.primary : Colors.white,
+            color: isSelected ? colorScheme.primary : colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: isSelected ? [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
+            border: Border.all(
+                color: isSelected ? Colors.transparent : colorScheme.outlineVariant.withOpacity(0.5)
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: isSelected ? Colors.white : Colors.grey),
+              Icon(
+                  icon,
+                  size: 18,
+                  color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey,
+                  color: isSelected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -197,15 +214,23 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   }
 
   Widget _buildPostSearchContent() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (_searchQuery.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.travel_explore, size: 80, color: Colors.grey.withOpacity(0.2)),
+            Icon(Icons.travel_explore, size: 80, color: colorScheme.primary.withOpacity(0.2)),
             const SizedBox(height: 16),
-            const Text('Discover new destinations', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-            const Text('Search for Murree, Hunza, or Kashmir...', style: TextStyle(color: Colors.grey)),
+            Text(
+                'Discover new destinations',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface)
+            ),
+            Text(
+                'Search for Murree, Hunza, or Kashmir...',
+                style: TextStyle(color: colorScheme.onSurfaceVariant)
+            ),
           ],
         ),
       );
@@ -215,18 +240,18 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       stream: _firestore.collection('posts').where('privacy', isEqualTo: 'public').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        
+
         final query = _searchQuery.toLowerCase();
         final docs = snapshot.data?.docs ?? [];
-        
+
         final filteredPosts = docs.map((doc) => Post.fromJson(doc.data() as Map<String, dynamic>))
-            .where((post) => 
-                post.location.toLowerCase().contains(query) || 
-                post.cityName.toLowerCase().contains(query))
+            .where((post) =>
+        post.location.toLowerCase().contains(query) ||
+            post.cityName.toLowerCase().contains(query))
             .toList();
 
         if (filteredPosts.isEmpty) {
-          return Center(child: Text('No posts found for "$_searchQuery"'));
+          return Center(child: Text('No posts found for "$_searchQuery"', style: TextStyle(color: colorScheme.onSurface)));
         }
 
         return ListView.builder(
@@ -245,7 +270,8 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   }
 
   Widget _buildUserSearchContent() {
-    // If search bar is empty, show "Suggested" section
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (_searchQuery.isEmpty) {
       return ListView(
         children: [
@@ -254,35 +280,33 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           Center(
             child: Column(
               children: [
-                Icon(Icons.person_search_outlined, size: 60, color: Colors.grey.withOpacity(0.3)),
+                Icon(Icons.person_search_outlined, size: 60, color: colorScheme.onSurfaceVariant.withOpacity(0.3)),
                 const SizedBox(height: 10),
-                const Text('Search for other travelers', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                Text(
+                    'Search for other travelers',
+                    style: TextStyle(color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)
+                ),
               ],
             ),
           ),
         ],
       );
     }
-    
+
     if (_isUserSearching) return const Center(child: CircularProgressIndicator());
 
     if (_searchResults.isEmpty) {
-      return Center(child: Text('No users found matching "$_searchQuery"'));
+      return Center(child: Text('No users found matching "$_searchQuery"', style: TextStyle(color: colorScheme.onSurface)));
     }
 
     return ListView.builder(
       itemCount: _searchResults.length,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemBuilder: (context, index) {
-        // Animation for search results
-        return AnimatedOpacity(
-          opacity: 1.0,
-          duration: const Duration(milliseconds: 400),
-          child: UserCard(
-            user: _searchResults[index],
-            currentUserId: _currentUser?.id ?? '',
-            onFriendStatusChanged: _loadCurrentUserAndSuggestions,
-          ),
+        return UserCard(
+          user: _searchResults[index],
+          currentUserId: _currentUser?.id ?? '',
+          onFriendStatusChanged: _loadCurrentUserAndSuggestions,
         );
       },
     );
@@ -294,15 +318,19 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           child: Text(
             'Discover Travelers',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface
+            ),
           ),
         ),
         SizedBox(
-          height: 160,
+          height: 170, // Thoda height barha di taake padding sahi ho
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -318,19 +346,19 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   }
 
   Widget _buildSuggestedUserItem(User user) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       width: 120,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 3)),
-        ],
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
       ),
       child: InkWell(
         onTap: () {
-          // Navigate to profile logic
+          // Profile navigation logic
         },
         borderRadius: BorderRadius.circular(20),
         child: Column(
@@ -340,28 +368,33 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.5), width: 2),
+                border: Border.all(color: colorScheme.primary.withOpacity(0.5), width: 2),
               ),
               child: CircleAvatar(
                 radius: 30,
+                backgroundColor: colorScheme.primaryContainer,
                 backgroundImage: user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty
                     ? NetworkImage(user.profileImageUrl!)
                     : null,
                 child: user.profileImageUrl == null || user.profileImageUrl!.isEmpty
-                    ? const Icon(Icons.person)
+                    ? Icon(Icons.person, color: colorScheme.onPrimaryContainer)
                     : null,
               ),
             ),
             const SizedBox(height: 10),
             Text(
               user.displayName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: colorScheme.onSurface
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
               '@${user.username}',
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
