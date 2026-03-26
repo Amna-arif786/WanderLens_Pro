@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.mycompany.WanderLens"
     compileSdk = 35 // Direct version number
-    
+    ndkVersion "26.1.10909125"
     defaultConfig {
         applicationId = "com.mycompany.WanderLense"
         minSdkVersion flutter.minSdkVersion
