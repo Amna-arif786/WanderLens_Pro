@@ -128,8 +128,8 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
         style: TextStyle(color: colorScheme.onSurface),
         decoration: InputDecoration(
           hintText: _selectedTab == _ExploreTab.posts
-              ? 'Search locations (e.g. Hunza)...'
-              : 'Search travelers...',
+              ? 'Search Image by locations (e.g. Hunza)...'
+              : 'Search other users...',
           hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
           prefixIcon: Icon(Icons.search, color: colorScheme.primary),
           suffixIcon: _searchQuery.isNotEmpty
@@ -160,9 +160,9 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildTab(_ExploreTab.posts, 'Locations', Icons.map_outlined),
+          _buildTab(_ExploreTab.posts, 'Place', Icons.map_outlined),
           const SizedBox(width: 12),
-          _buildTab(_ExploreTab.users, 'Travelers', Icons.people_outline),
+          _buildTab(_ExploreTab.users, 'Users', Icons.people_outline),
         ],
       ),
     );

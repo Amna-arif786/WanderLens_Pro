@@ -11,7 +11,7 @@ class ImageVerificationConfig {
 
   static const List<String> rejectedKeywords = [
     'logo', 'graphic design', 'font', 'brand', 'text', 'screenshot', 'advertising', 
-    'illustration', 'clipart', 'poster', 'document'
+    'illustration', 'clipart', 'poster', 'document','clear human faces'
   ];
 
   // Lowered confidence for better UX on device

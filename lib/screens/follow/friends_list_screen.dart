@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/services/friend_service.dart';
 import 'package:wanderlens/screens/profile/profile_screen.dart';
@@ -26,10 +27,12 @@ class FriendsListScreen extends StatefulWidget {
 class _FriendsListScreenState extends State<FriendsListScreen> {
   List<User> _friends = [];
   bool _isLoading = true;
+  String? _authenticatedUserId;
 
   @override
   void initState() {
     super.initState();
+    _authenticatedUserId = auth.FirebaseAuth.instance.currentUser?.uid;
     _loadFriends();
   }
 
@@ -90,7 +93,6 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
     if (!widget.showAppBar) return _buildBody();
 
     return ConstrainedScaffold(
-      // Dynamic background color
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
@@ -140,7 +142,6 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
 
     return Column(
       children: [
-        // Friends Count Header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           alignment: Alignment.centerLeft,
@@ -170,11 +171,13 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
   Widget _buildFriendCard(User friend) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Only show unfriend button if the list being viewed belongs to the authenticated user
+    final bool isMyFriendList = _authenticatedUserId == widget.currentUserId;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        // Card color automatically adjusts
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
@@ -229,20 +232,20 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
                   ],
                 ),
               ),
-              // Professional Red Outlined Button for Unfriend
-              OutlinedButton(
-                onPressed: () => _unfriend(friend),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: colorScheme.error,
-                  side: BorderSide(color: colorScheme.error.withOpacity(0.4)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+              if (isMyFriendList)
+                OutlinedButton(
+                  onPressed: () => _unfriend(friend),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colorScheme.error,
+                    side: BorderSide(color: colorScheme.error.withOpacity(0.4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  child: const Text(
+                      'Unfriend',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
+                  ),
                 ),
-                child: const Text(
-                    'Unfriend',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
-                ),
-              ),
             ],
           ),
         ),

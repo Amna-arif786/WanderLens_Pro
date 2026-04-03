@@ -23,6 +23,14 @@ class FriendService {
 
   static Future<FriendRequest?> getFriendRequest(String senderId, String receiverId) async {
     try {
+      // First try with deterministic ID
+      final docId = '${senderId}_$receiverId';
+      final doc = await _firestore.collection('friend_requests').doc(docId).get();
+      if (doc.exists) {
+        return FriendRequest.fromJson(doc.data()!);
+      }
+
+      // Fallback for older requests with random IDs
       final snapshot = await _firestore
           .collection('friend_requests')
           .where('senderId', isEqualTo: senderId)
@@ -49,9 +57,21 @@ class FriendService {
       throw Exception('Already following this user');
     }
 
-    final docRef = _firestore.collection('friend_requests').doc();
+    // Use deterministic ID to prevent duplicates and race conditions
+    final docId = '${senderId}_$receiverId';
+    final docRef = _firestore.collection('friend_requests').doc(docId);
+
+    final doc = await docRef.get();
+    if (doc.exists) {
+      final existing = FriendRequest.fromJson(doc.data()!);
+      if (existing.status == FriendRequestStatus.pending) {
+        return existing;
+      }
+      // If rejected, we allow re-sending by overwriting
+    }
+
     final request = FriendRequest(
-      id: docRef.id,
+      id: docId,
       senderId: senderId,
       receiverId: receiverId,
       status: FriendRequestStatus.pending,
@@ -71,11 +91,21 @@ class FriendService {
       if (doc.exists) {
         final request = FriendRequest.fromJson(doc.data()!);
         
-        // Update request status
-        await docRef.update({
-          'status': FriendRequestStatus.accepted.name,
-          'updatedAt': DateTime.now().toIso8601String(),
-        });
+        // Find and update ALL pending requests between these two users to clean up duplicates
+        final duplicates = await _firestore.collection('friend_requests')
+            .where('senderId', isEqualTo: request.senderId)
+            .where('receiverId', isEqualTo: request.receiverId)
+            .where('status', isEqualTo: FriendRequestStatus.pending.name)
+            .get();
+
+        final batch = _firestore.batch();
+        for (var d in duplicates.docs) {
+          batch.update(d.reference, {
+            'status': FriendRequestStatus.accepted.name,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+        }
+        await batch.commit();
 
         // Create friendship (Follow connection)
         await _createFriendship(request.senderId, request.receiverId);
@@ -87,10 +117,28 @@ class FriendService {
 
   static Future<void> rejectFriendRequest(String requestId) async {
     try {
-      await _firestore.collection('friend_requests').doc(requestId).update({
-        'status': FriendRequestStatus.rejected.name,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
+      final docRef = _firestore.collection('friend_requests').doc(requestId);
+      final doc = await docRef.get();
+      
+      if (doc.exists) {
+        final request = FriendRequest.fromJson(doc.data()!);
+        
+        // Find and update ALL pending requests between these two users to clean up duplicates
+        final duplicates = await _firestore.collection('friend_requests')
+            .where('senderId', isEqualTo: request.senderId)
+            .where('receiverId', isEqualTo: request.receiverId)
+            .where('status', isEqualTo: FriendRequestStatus.pending.name)
+            .get();
+
+        final batch = _firestore.batch();
+        for (var d in duplicates.docs) {
+          batch.update(d.reference, {
+            'status': FriendRequestStatus.rejected.name,
+            'updatedAt': DateTime.now().toIso8601String(),
+          });
+        }
+        await batch.commit();
+      }
     } catch (e) {
       throw Exception('Failed to reject request: $e');
     }
@@ -99,6 +147,14 @@ class FriendService {
   // User Friends (Following/Followers)
   static Future<bool> areUsersFriends(String userId1, String userId2) async {
     try {
+      // Check deterministic IDs first
+      final doc1 = await _firestore.collection('user_friends').doc('${userId1}_$userId2').get();
+      if (doc1.exists) return true;
+      
+      final doc2 = await _firestore.collection('user_friends').doc('${userId2}_$userId1').get();
+      if (doc2.exists) return true;
+
+      // Fallback for old random IDs
       final snapshot = await _firestore
           .collection('user_friends')
           .where('userId', isEqualTo: userId1)
@@ -192,9 +248,15 @@ class FriendService {
   }
 
   static Future<void> _createFriendship(String userId1, String userId2) async {
-    final docRef = _firestore.collection('user_friends').doc();
+    // Use deterministic ID for friendship
+    final docId = '${userId1}_$userId2';
+    final docRef = _firestore.collection('user_friends').doc(docId);
+    
+    final doc = await docRef.get();
+    if (doc.exists) return; // Already exists
+
     final friendship = UserFriend(
-      id: docRef.id,
+      id: docId,
       userId: userId1,
       friendId: userId2,
       createdAt: DateTime.now(),
@@ -216,6 +278,11 @@ class FriendService {
 
   static Future<void> removeFriend(String userId1, String userId2) async {
     try {
+      // Delete both possible deterministic IDs
+      await _firestore.collection('user_friends').doc('${userId1}_$userId2').delete();
+      await _firestore.collection('user_friends').doc('${userId2}_$userId1').delete();
+
+      // Fallback for old random IDs
       final snapshot = await _firestore
           .collection('user_friends')
           .where('userId', isEqualTo: userId1)

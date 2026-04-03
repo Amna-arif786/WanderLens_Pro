@@ -90,6 +90,32 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
+  void _unfriend() async {
+    if (_user == null || _currentUserId == null) return;
+    
+    final colorScheme = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unfriend?'),
+        content: Text('Are you sure you want to remove ${_user!.displayName} from your friends?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: colorScheme.error),
+            child: const Text('Unfriend'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await FriendService.removeFriend(_currentUserId!, _user!.id);
+      _loadUser();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -120,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               pinned: true,
               delegate: _SliverAppBarDelegate(
                 child: Container(
-                  color: Theme.of(context).scaffoldBackgroundColor,
+                  color: colorScheme.surface,
                   child: _buildTabBar(),
                 ),
               ),
@@ -140,37 +166,94 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   Widget _buildProfileHeader() {
     final colorScheme = Theme.of(context).colorScheme;
-    return StreamBuilder<List<Post>>(
-      stream: PostService.getPostsStreamByUserId(_user!.id, viewerId: _currentUserId),
-      builder: (context, postsSnapshot) {
-        final postCount = postsSnapshot.data?.length ?? 0;
-        return Column(
-          children: [
-            const SizedBox(height: 10),
-            UserAvatar(imageUrl: _user?.profileImageUrl, size: 90),
-            const SizedBox(height: 12),
-            Text(_user?.displayName ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            if (_user?.bio?.isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                child: Text(_user!.bio!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
-              ),
-            const SizedBox(height: 15),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: _isCurrentUser || _currentUserId == null 
+        ? null 
+        : FirebaseFirestore.instance
+            .collection('friend_requests')
+            .where('senderId', whereIn: [_currentUserId, _user!.id])
+            .snapshots(),
+      builder: (context, friendSnapshot) {
+        bool areFriends = false;
+        DocumentSnapshot? myRequest;
+        DocumentSnapshot? theirRequest;
+
+        if (friendSnapshot.hasData) {
+          for (var doc in friendSnapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['senderId'] == _currentUserId && data['receiverId'] == _user!.id) myRequest = doc;
+            if (data['senderId'] == _user!.id && data['receiverId'] == _currentUserId) theirRequest = doc;
+          }
+          areFriends = (myRequest != null && myRequest['status'] == 'accepted') || 
+                       (theirRequest != null && theirRequest['status'] == 'accepted');
+        }
+
+        return StreamBuilder<List<Post>>(
+          stream: PostService.getPostsStreamByUserId(_user!.id, viewerId: _currentUserId),
+          builder: (context, postsSnapshot) {
+            final postCount = postsSnapshot.data?.length ?? 0;
+            return Column(
               children: [
-                _buildStatItem('Posts', postCount.toString()),
-                _buildStatItem('Friends', _user?.friendCount.toString() ?? '0', onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => FriendsListScreen(currentUserId: _user!.id, currentUserDisplayName: _user!.displayName, onFriendsChanged: _loadUser)));
-                }),
+                const SizedBox(height: 10),
+                UserAvatar(imageUrl: _user?.profileImageUrl, size: 90),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(_user?.displayName ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    if (areFriends) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle, size: 14, color: colorScheme.onPrimaryContainer),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Friend',
+                              style: TextStyle(
+                                fontSize: 10, 
+                                fontWeight: FontWeight.bold, 
+                                color: colorScheme.onPrimaryContainer
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+                if (_user?.bio?.isNotEmpty == true)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                    child: Text(_user!.bio!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
+                  ),
+                const SizedBox(height: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatItem('Posts', postCount.toString()),
+                    _buildStatItem('Friends', _user?.friendCount.toString() ?? '0', onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => FriendsListScreen(currentUserId: _user!.id, currentUserDisplayName: _user!.displayName, onFriendsChanged: _loadUser)));
+                    }),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                _isCurrentUser 
+                  ? _buildEditProfileButton(colorScheme) 
+                  : _buildFriendshipButton(myRequest, theirRequest, areFriends),
+                const SizedBox(height: 10),
               ],
-            ),
-            const SizedBox(height: 15),
-            _isCurrentUser ? _buildEditProfileButton(colorScheme) : _buildFriendshipButton(),
-            const SizedBox(height: 10),
-          ],
+            );
+          },
         );
-      },
+      }
     );
   }
 
@@ -191,83 +274,101 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  // --- Complete Friendship Logic Button ---
-  Widget _buildFriendshipButton() {
+  Widget _buildFriendshipButton(DocumentSnapshot? myRequest, DocumentSnapshot? theirRequest, bool areFriends) {
     if (_currentUserId == null) return const SizedBox.shrink();
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('friend_requests')
-          .where('senderId', whereIn: [_currentUserId, _user!.id])
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const CircularProgressIndicator();
+    Widget button;
+    // Case 1: Already Friends
+    if (areFriends) {
+      button = OutlinedButton.icon(
+        onPressed: _unfriend,
+        icon: const Icon(Icons.people, size: 18),
+        label: const Text("Friends"),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          side: BorderSide(color: Theme.of(context).colorScheme.outline),
+        ),
+      );
+    }
+    // Case 2: I sent a request (Pending)
+    else if (myRequest != null && myRequest['status'] == 'pending') {
+      button = OutlinedButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.timer_outlined, size: 18),
+        label: const Text("Requested"),
+      );
+    }
+    // Case 3: They sent me a request
+    else if (theirRequest != null && theirRequest['status'] == 'pending') {
+      button = ElevatedButton.icon(
+        onPressed: () => _tabController.animateTo(1),
+        icon: const Icon(Icons.person_add, size: 18),
+        label: const Text("Respond"),
+        style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
+      );
+    }
+    // Case 4: No request yet
+    else {
+      button = ElevatedButton.icon(
+        onPressed: () => FriendService.sendFriendRequest(_currentUserId!, _user!.id),
+        icon: const Icon(Icons.person_add, size: 18),
+        label: const Text("Add Friend"),
+        style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
+      );
+    }
 
-        final docs = snapshot.data!.docs;
-        DocumentSnapshot? myRequest;
-        DocumentSnapshot? theirRequest;
-
-        for (var doc in docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          if (data['senderId'] == _currentUserId && data['receiverId'] == _user!.id) myRequest = doc;
-          if (data['senderId'] == _user!.id && data['receiverId'] == _currentUserId) theirRequest = doc;
-        }
-
-        Widget button;
-        // Case 1: Already Friends
-        if (myRequest != null && myRequest['status'] == 'accepted' || theirRequest != null && theirRequest['status'] == 'accepted') {
-          button = ElevatedButton.icon(
-            onPressed: null, // Yahan unfriend ka logic dalwa saktay hain baad mein
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text("Friends"),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black),
-          );
-        }
-        // Case 2: I sent a request (Pending)
-        else if (myRequest != null && myRequest['status'] == 'pending') {
-          button = OutlinedButton.icon(
-            onPressed: null,
-            icon: const Icon(Icons.timer_outlined, size: 18),
-            label: const Text("Requested"),
-          );
-        }
-        // Case 3: They sent me a request
-        else if (theirRequest != null && theirRequest['status'] == 'pending') {
-          button = ElevatedButton.icon(
-            onPressed: () => _tabController.animateTo(1),
-            icon: const Icon(Icons.person_add, size: 18),
-            label: const Text("Respond"),
-            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-          );
-        }
-        // Case 4: No request yet
-        else {
-          button = ElevatedButton.icon(
-            onPressed: () => FriendService.sendFriendRequest(_currentUserId!, _user!.id),
-            icon: const Icon(Icons.person_add, size: 18),
-            label: const Text("Add Friend"),
-            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-          );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(width: double.infinity, child: button),
-        );
-      },
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: SizedBox(width: double.infinity, child: button),
     );
   }
 
   Widget _buildTabBar() {
-    return TabBar(
-      controller: _tabController,
-      indicatorColor: Theme.of(context).colorScheme.onSurface,
-      labelColor: Theme.of(context).colorScheme.onSurface,
-      unselectedLabelColor: Colors.grey,
-      tabs: const [
-        Tab(icon: Icon(Icons.grid_on_rounded)),
-        Tab(icon: Icon(Icons.assignment_ind_outlined)),
-      ],
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+          color: colorScheme.onSurface.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: TabBar(
+          controller: _tabController,
+          indicator: BoxDecoration(
+            borderRadius: BorderRadius.circular(25),
+            color: colorScheme.primary,
+          ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelColor: Colors.white,
+          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+          dividerColor: Colors.transparent,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.grid_view_rounded, size: 18),
+                  SizedBox(width: 8),
+                  Text('Posts'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(_isCurrentUser ? Icons.mail_outline : Icons.people_outline, size: 18),
+                  const SizedBox(width: 8),
+                  Text(_isCurrentUser ? 'Requests' : 'Friends'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -302,12 +403,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) return const Center(child: Text("No pending requests"));
 
+        final seenSenders = <String>{};
+        final uniqueDocs = docs.where((doc) {
+          final senderId = (doc.data() as Map<String, dynamic>)['senderId'];
+          if (seenSenders.contains(senderId)) return false;
+          seenSenders.add(senderId);
+          return true;
+        }).toList();
+
         return ListView.builder(
           padding: const EdgeInsets.all(10),
-          itemCount: docs.length,
+          itemCount: uniqueDocs.length,
           itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final requestId = docs[index].id;
+            final data = uniqueDocs[index].data() as Map<String, dynamic>;
+            final requestId = uniqueDocs[index].id;
             return FutureBuilder<User?>(
               future: UserService.getUserById(data['senderId']),
               builder: (context, userSnap) {
@@ -353,11 +462,11 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   _SliverAppBarDelegate({required this.child});
   @override
-  double get minExtent => 48.0;
+  double get minExtent => 66.0;
   @override
-  double get maxExtent => 48.0;
+  double get maxExtent => 66.0;
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
   @override
-  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => true; 
 }

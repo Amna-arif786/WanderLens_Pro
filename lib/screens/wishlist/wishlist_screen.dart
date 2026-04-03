@@ -96,7 +96,6 @@ class _WishlistScreenState extends State<WishlistScreen> {
                             key: ValueKey(post.id),
                             post: post,
                             currentUserId: _currentUser!.id,
-                            // No need for onPostUpdated because StreamBuilder handles it
                           ),
                         );
                       },
@@ -116,15 +115,22 @@ class _WishlistScreenState extends State<WishlistScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Theme.of(context).colorScheme.secondary,
-            Theme.of(context).colorScheme.secondary.withOpacity(0.8),
+            Color(0xFFFF8F00), // Vibrant Orange
+            Color(0xFFFFB300),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF8F00).withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -135,10 +141,10 @@ class _WishlistScreenState extends State<WishlistScreen> {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(30),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.bookmark,
               size: 30,
-              color: Theme.of(context).colorScheme.onSecondary,
+              color: Colors.white,
             ),
           ),
           const SizedBox(width: 16),
@@ -149,7 +155,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 Text(
                   'Travel Inspiration',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSecondary,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -157,15 +163,15 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 Text(
                   '$count saved ${count == 1 ? 'destination' : 'destinations'}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSecondary.withOpacity(0.8),
+                    color: Colors.white.withOpacity(0.9),
                   ),
                 ),
               ],
             ),
           ),
-          Icon(
+          const Icon(
             Icons.favorite,
-            color: Theme.of(context).colorScheme.onSecondary,
+            color: Colors.white,
             size: 24,
           ),
         ],

@@ -6,27 +6,33 @@ plugins {
 }
 
 android {
-    namespace = "com.mycompany.WanderLens"
-    compileSdk = 35 // Direct version number
+    namespace = "com.mycompany.CounterApp"
+    compileSdk = 35
     ndkVersion "26.1.10909125"
+    
     defaultConfig {
-        applicationId = "com.mycompany.WanderLense"
+        applicationId = "com.mycompany.CounterApp"
         minSdkVersion flutter.minSdkVersion
-        targetSdk 35 // Direct version number
+        targetSdk 35
         versionCode flutter.versionCode
         versionName flutter.versionName
+        multiDexEnabled true
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation "androidx.multidex:multidex:2.0.1"
 }
