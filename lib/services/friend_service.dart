@@ -2,12 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:wanderlens/models/friend_request.dart';
 import 'package:wanderlens/models/user_friend.dart';
 import 'package:wanderlens/models/user.dart';
+import 'package:wanderlens/models/notification_model.dart';
 import 'package:wanderlens/services/user_service.dart';
+import 'package:wanderlens/services/notification_service.dart';
 
 class FriendService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Friend Requests (Follow Requests)
   static Future<List<FriendRequest>> getPendingRequestsForUser(String userId) async {
     try {
       final snapshot = await _firestore
@@ -23,14 +24,12 @@ class FriendService {
 
   static Future<FriendRequest?> getFriendRequest(String senderId, String receiverId) async {
     try {
-      // First try with deterministic ID
       final docId = '${senderId}_$receiverId';
       final doc = await _firestore.collection('friend_requests').doc(docId).get();
       if (doc.exists) {
         return FriendRequest.fromJson(doc.data()!);
       }
 
-      // Fallback for older requests with random IDs
       final snapshot = await _firestore
           .collection('friend_requests')
           .where('senderId', isEqualTo: senderId)
@@ -57,7 +56,6 @@ class FriendService {
       throw Exception('Already following this user');
     }
 
-    // Use deterministic ID to prevent duplicates and race conditions
     final docId = '${senderId}_$receiverId';
     final docRef = _firestore.collection('friend_requests').doc(docId);
 
@@ -67,7 +65,6 @@ class FriendService {
       if (existing.status == FriendRequestStatus.pending) {
         return existing;
       }
-      // If rejected, we allow re-sending by overwriting
     }
 
     final request = FriendRequest(
@@ -80,6 +77,17 @@ class FriendService {
     );
 
     await docRef.set(request.toJson());
+
+    // Send Notification
+    final sender = await UserService.getUserById(senderId);
+    if (sender != null) {
+      await NotificationService.createNotification(
+        receiverId: receiverId,
+        sender: sender,
+        type: NotificationType.friendRequest,
+      );
+    }
+
     return request;
   }
 
@@ -91,7 +99,6 @@ class FriendService {
       if (doc.exists) {
         final request = FriendRequest.fromJson(doc.data()!);
         
-        // Find and update ALL pending requests between these two users to clean up duplicates
         final duplicates = await _firestore.collection('friend_requests')
             .where('senderId', isEqualTo: request.senderId)
             .where('receiverId', isEqualTo: request.receiverId)
@@ -107,7 +114,6 @@ class FriendService {
         }
         await batch.commit();
 
-        // Create friendship (Follow connection)
         await _createFriendship(request.senderId, request.receiverId);
       }
     } catch (e) {
@@ -123,7 +129,6 @@ class FriendService {
       if (doc.exists) {
         final request = FriendRequest.fromJson(doc.data()!);
         
-        // Find and update ALL pending requests between these two users to clean up duplicates
         final duplicates = await _firestore.collection('friend_requests')
             .where('senderId', isEqualTo: request.senderId)
             .where('receiverId', isEqualTo: request.receiverId)
@@ -144,17 +149,14 @@ class FriendService {
     }
   }
 
-  // User Friends (Following/Followers)
   static Future<bool> areUsersFriends(String userId1, String userId2) async {
     try {
-      // Check deterministic IDs first
       final doc1 = await _firestore.collection('user_friends').doc('${userId1}_$userId2').get();
       if (doc1.exists) return true;
       
       final doc2 = await _firestore.collection('user_friends').doc('${userId2}_$userId1').get();
       if (doc2.exists) return true;
 
-      // Fallback for old random IDs
       final snapshot = await _firestore
           .collection('user_friends')
           .where('userId', isEqualTo: userId1)
@@ -177,7 +179,6 @@ class FriendService {
     }
   }
 
-  /// Get list of users that the given [userId] is following..
   static Future<List<User>> getFollowing(String userId) async {
     try {
       final snapshot = await _firestore
@@ -197,11 +198,9 @@ class FriendService {
     }
   }
 
-  /// Returns all friends (both directions: sent+accepted OR received+accepted)..
   static Future<List<User>> getFriends(String userId) async {
     try {
       final friends = <String, User>{};
-      // People I sent request to and they accepted (userId = me, friendId = them)..
       final following = await _firestore
           .collection('user_friends')
           .where('userId', isEqualTo: userId)
@@ -211,7 +210,6 @@ class FriendService {
         final user = await UserService.getUserById(data.friendId);
         if (user != null) friends[user.id] = user;
       }
-      // People who sent request to me and I accepted (friendId = me, userId = them)..
       final followers = await _firestore
           .collection('user_friends')
           .where('friendId', isEqualTo: userId)
@@ -227,7 +225,6 @@ class FriendService {
     }
   }
 
-  /// Get list of users who are following the given [userId]..
   static Future<List<User>> getFollowers(String userId) async {
     try {
       final snapshot = await _firestore
@@ -248,12 +245,11 @@ class FriendService {
   }
 
   static Future<void> _createFriendship(String userId1, String userId2) async {
-    // Use deterministic ID for friendship
     final docId = '${userId1}_$userId2';
     final docRef = _firestore.collection('user_friends').doc(docId);
     
     final doc = await docRef.get();
-    if (doc.exists) return; // Already exists
+    if (doc.exists) return;
 
     final friendship = UserFriend(
       id: docId,
@@ -264,7 +260,6 @@ class FriendService {
 
     await docRef.set(friendship.toJson());
 
-    // Update follow counts for both users..
     final user1 = await UserService.getUserById(userId1);
     final user2 = await UserService.getUserById(userId2);
     
@@ -278,11 +273,9 @@ class FriendService {
 
   static Future<void> removeFriend(String userId1, String userId2) async {
     try {
-      // Delete both possible deterministic IDs
       await _firestore.collection('user_friends').doc('${userId1}_$userId2').delete();
       await _firestore.collection('user_friends').doc('${userId2}_$userId1').delete();
 
-      // Fallback for old random IDs
       final snapshot = await _firestore
           .collection('user_friends')
           .where('userId', isEqualTo: userId1)
@@ -303,7 +296,6 @@ class FriendService {
         await doc.reference.delete();
       }
 
-      // Update follow counts..
       final user1 = await UserService.getUserById(userId1);
       final user2 = await UserService.getUserById(userId2);
       

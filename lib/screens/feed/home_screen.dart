@@ -5,6 +5,8 @@ import 'package:wanderlens/services/user_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wanderlens/widgets/post_card.dart';
 import 'package:wanderlens/screens/auth/login_screen.dart';
+import 'package:wanderlens/services/notification_service.dart';
+import 'package:wanderlens/screens/notification/notification_screen.dart';
 
 import '../../responsive/constrained_scaffold.dart';
 
@@ -62,9 +64,49 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('WanderLens', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () {},
+          StreamBuilder<int>(
+            stream: NotificationService.getUnreadCountStream(_currentUserId),
+            builder: (context, snapshot) {
+              final int unreadCount = snapshot.data ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none_rounded),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                      );
+                    },
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
@@ -91,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: _refreshFeed,
         child: StreamBuilder<QuerySnapshot>(
-          // Real-time updates from the main posts collection
           stream: _firestore.collection('posts').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -108,15 +149,12 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            // Map and filter posts
             final List<Post> posts = snapshot.data!.docs.map((doc) {
               return Post.fromJson(doc.data() as Map<String, dynamic>);
             }).where((post) {
-              // Show public posts OR posts created by the current user
               return post.privacy == PostPrivacy.public || post.userId == _currentUserId;
             }).toList();
 
-            // Sort newest first
             posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
             if (posts.isEmpty) {
@@ -131,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: PostCard(
-                    key: ValueKey(post.id), // Important for correct state tracking
+                    key: ValueKey(post.id),
                     post: post,
                     currentUserId: _currentUserId,
                     onPostUpdated: () => setState(() {}),

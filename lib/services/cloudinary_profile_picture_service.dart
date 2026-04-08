@@ -2,10 +2,11 @@ import 'dart:typed_data';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class CloudinaryProfileService {
-  static const String _cloudName = 'dnkuxlhcs';
-  static const String _uploadPreset = 'wanderlens_profile_preset'; 
+  static final String _cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+  static final String _uploadPreset = dotenv.env['CLOUDINARY_PROFILE_UPLOAD_PRESET'] ?? ''; 
 
   static final CloudinaryPublic _cloudinary = CloudinaryPublic(
     _cloudName,

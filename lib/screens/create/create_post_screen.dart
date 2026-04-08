@@ -392,7 +392,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         TextFormField(
           controller: _locationController,
           decoration: InputDecoration(
-            labelText: 'Location/Monument',
+            labelText: 'Tourist Spot/Location Name/Monument',
             hintText: 'e.g., Badshahi Mosque, Faisal Masjid',
             prefixIcon: Icon(Icons.place_outlined, color: Theme.of(context).colorScheme.primary),
             border: OutlineInputBorder(

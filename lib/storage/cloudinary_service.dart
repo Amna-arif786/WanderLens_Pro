@@ -2,13 +2,14 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// CloudinaryService handles image uploads to Cloudinary storage..
 /// It provides separate methods for profile and post images to keep storage organized..
 class CloudinaryService {
   static final _cloudinary = CloudinaryPublic(
-    'dnkuxlhcs', // Your Cloudinary Cloud Name..
-    'wanderlens_preset', // Your Cloudinary Upload Preset..
+    dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '', // Cloudinary Cloud Name from .env
+    dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '', // Cloudinary Upload Preset from .env
     cache: false,
   );
 

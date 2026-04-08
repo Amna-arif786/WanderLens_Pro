@@ -18,6 +18,17 @@ class CommentService {
     }
   }
 
+  /// Real-time stream of comments for a post, newest first.
+  static Stream<List<Comment>> getCommentsStream(String postId) {
+    return _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => Comment.fromJson(doc.data())).toList());
+  }
+
   static Future<Comment> createComment({
     required String postId,
     required String userId,

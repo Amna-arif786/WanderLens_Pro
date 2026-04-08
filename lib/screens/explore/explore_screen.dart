@@ -81,7 +81,6 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     final colorScheme = Theme.of(context).colorScheme;
 
     return ConstrainedScaffold(
-      // Hardcoded color ki jagah theme ka surface color
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
@@ -118,7 +117,6 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        // Dark mode mein halka grey/navy black box professional lagta hai
         color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.3)),
@@ -132,12 +130,15 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
               : 'Search other users...',
           hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
           prefixIcon: Icon(Icons.search, color: colorScheme.primary),
-          suffixIcon: _searchQuery.isNotEmpty
+          suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
             icon: Icon(Icons.clear, color: colorScheme.onSurfaceVariant),
             onPressed: () {
               _searchController.clear();
-              setState(() => _searchQuery = '');
+              setState(() {
+                _searchQuery = '';
+                _searchResults = [];
+              });
               if (_selectedTab == _ExploreTab.users) _searchUsers('');
             },
           )
@@ -175,10 +176,15 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     return Expanded(
       child: InkWell(
         onTap: () {
-          setState(() {
-            _selectedTab = tab;
-            _searchQuery = _searchController.text.trim();
-          });
+          if (_selectedTab != tab) {
+            setState(() {
+              _selectedTab = tab;
+              // Clear search when switching tabs for a clean experience
+              _searchController.clear();
+              _searchQuery = '';
+              _searchResults = [];
+            });
+          }
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -330,7 +336,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           ),
         ),
         SizedBox(
-          height: 170, // Thoda height barha di taake padding sahi ho
+          height: 170,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),

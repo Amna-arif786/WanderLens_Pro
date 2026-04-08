@@ -1,62 +1,89 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart' show GoogleSignIn, GoogleSignInAccount, GoogleSignInAuthentication;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:wanderlens/services/user_service.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
-  static Future<Map<String, dynamic>?> signInWithgoogle() async {
+  static const List<String> _scopes = [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'openid',
+  ];
+
+  /// Signs in with Google.
+  ///
+  /// Calls [disconnect] first so the account picker always appears —
+  /// important when the device has multiple Google accounts.
+  ///
+  /// Returns:
+  ///   'isNewUser'    → bool
+  ///   'tempUserData' → Map?  (only for new users)
+  ///
+  /// Returns null if the user cancels.
+  static Future<Map<String, dynamic>?> signInWithGoogle() async {
+    // Clear cached account so the picker is always shown.
     try {
-      // Sign out first to ensure account picker
-      try {
-        await _googleSignIn.signOut();
-      } catch (_) {}
+      await GoogleSignIn.instance.disconnect();
+    } catch (_) {}
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
-      if (googleUser == null) return null;
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
-      final User? firebaseUser = userCredential.user;
-
-      if (firebaseUser != null) {
-        final existingUser = await UserService.getUserById(firebaseUser.uid);
-        
-        return {
-          'userCredential': userCredential,
-          'isNewUser': existingUser == null,
-          'tempUserData': existingUser == null ? {
-            'id': firebaseUser.uid,
-            'email': firebaseUser.email,
-            'displayName': firebaseUser.displayName,
-            'photoURL': firebaseUser.photoURL,
-          } : null,
-        };
-      }
-      return null;
-    } catch (e) {
-      print('Google Sign-In Error: $e');
-      rethrow;
+    // Show the native Google account picker.
+    final GoogleSignInAccount googleUser;
+    try {
+      googleUser =
+          await GoogleSignIn.instance.authenticate(scopeHint: _scopes);
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return null;
+      throw Exception('Google sign-in failed: ${e.description ?? e.code.name}');
     }
+
+    // idToken for Firebase credential (sync getter in v7).
+    final String? idToken = googleUser.authentication.idToken;
+    if (idToken == null) throw Exception('Google did not return an ID token.');
+
+    // accessToken is optional for Firebase; attempt to fetch but don't fail.
+    String? accessToken;
+    try {
+      final auth = await googleUser.authorizationClient
+          .authorizationForScopes(_scopes);
+      accessToken = auth?.accessToken;
+    } catch (_) {
+      // accessToken is not required by Firebase — proceed with idToken only.
+    }
+
+    final AuthCredential credential = GoogleAuthProvider.credential(
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+
+    final UserCredential userCredential;
+    try {
+      userCredential = await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      throw Exception('Firebase auth failed: ${e.message}');
+    }
+
+    final User? firebaseUser = userCredential.user;
+    if (firebaseUser == null) throw Exception('Firebase user is null.');
+
+    final existingUser = await UserService.getUserById(firebaseUser.uid);
+
+    return {
+      'userCredential': userCredential,
+      'isNewUser': existingUser == null,
+      'tempUserData': existingUser == null
+          ? {
+              'id': firebaseUser.uid,
+              'email': firebaseUser.email,
+              'displayName': firebaseUser.displayName,
+              'photoURL': firebaseUser.photoURL,
+            }
+          : null,
+    };
   }
 
   static Future<void> signOut() async {
-    try {
-      await _googleSignIn.signOut();
-      await _auth.signOut();
-    } catch (e) {
-      print('Sign-Out Error: $e');
-    }
+    await GoogleSignIn.instance.signOut();
+    await _auth.signOut();
   }
-}
-
-extension on GoogleSignInAuthentication {
-   String? get accessToken =>this.accessToken;
 }
