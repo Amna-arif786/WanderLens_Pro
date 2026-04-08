@@ -9,14 +9,40 @@ android {
     namespace = "com.mycompany.CounterApp"
     compileSdk = 35
     ndkVersion "26.1.10909125"
-    
+
     defaultConfig {
         applicationId = "com.mycompany.CounterApp"
+        // WanderLens project ke liye agar minSdkVersion error de to yahan 21 ya 23 likh sakte hain
         minSdkVersion flutter.minSdkVersion
         targetSdk 35
         versionCode flutter.versionCode
         versionName flutter.versionName
         multiDexEnabled true
+    }
+
+    signingConfigs {
+        release {
+            // Yahan apni release key details dalain agar hain,
+            // varna filhal debug config use ho rahi hai build types mein
+            storeFile file('upload-keystore.jks')
+            storePassword 'password'
+            keyAlias 'upload'
+            keyPassword 'password'
+        }
+    }
+
+    buildTypes {
+        release {
+            // R8 (Minification) ko rules batane ke liye
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // Debugging ke liye agar build fail ho to in dono ko false kar ke check kar sakte hain
+            minifyEnabled true
+            shrinkResources true
+
+            // IMPORTANT: Agar aapke paas apni .jks file nahi hai to yahan signingConfigs.debug likhen
+            signingConfig signingConfigs.debug
+        }
     }
 
     compileOptions {
@@ -34,20 +60,21 @@ flutter {
     source = "../.."
 }
 
-configurations {
-    all {
-        exclude group: 'com.google.firebase', module: 'firebase-iid'
-    }
-}
-
 dependencies {
     implementation "androidx.multidex:multidex:2.0.1"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
-    
-    // Import the Firebase BoM
-    implementation platform('com.google.firebase:firebase-bom:33.7.0')
-    
-    // When using the BoM, you don't specify versions in Firebase dependencies
+
+    // Firebase Setup
+    implementation platform('com.google.firebase:firebase-bom:33.10.0')
     implementation 'com.google.firebase:firebase-messaging'
     implementation 'com.google.firebase:firebase-analytics'
+    // Is section ko bilkul end mein paste karein
+    configurations.all {
+        resolutionStrategy {
+            // Ye line duplicate class ka masla hal karegi
+            force 'com.google.firebase:firebase-messaging:24.0.0'
+        }
+        // Purani library ko nikalne ke liye
+        exclude group: 'com.google.firebase', module: 'firebase-iid'
+    }
 }
