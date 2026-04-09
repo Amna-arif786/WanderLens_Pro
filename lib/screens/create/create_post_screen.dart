@@ -8,8 +8,79 @@ import 'package:wanderlens/services/image_verification_service.dart';
 import 'package:wanderlens/storage/cloudinary_service.dart';
 import 'package:wanderlens/screens/main_navigation.dart';
 import 'package:wanderlens/utils/location_constants.dart';
-
 import '../../responsive/constrained_scaffold.dart';
+
+// Rejection dialog content per reason
+const Map<ImageRejectionReason, _RejectionContent> _rejectionContent = {
+  ImageRejectionReason.facesWithoutDestination: _RejectionContent(
+    icon: Icons.face_retouching_off_outlined,
+    color: Color(0xFFE65100),
+    title: 'Human Face Detected',
+    description:
+        'WanderLens only accepts photos of travel destinations, monuments, '
+        'and landscapes — without any people in the frame. Your photo '
+        'contains a visible face and cannot be accepted.',
+    tips: [
+      'Upload a photo with no people visible in it.',
+      'Capture the monument, landmark, or scenery on its own.',
+      'If someone accidentally appears in the background, try a different angle or crop.',
+    ],
+  ),
+  ImageRejectionReason.notATravelDestination: _RejectionContent(
+    icon: Icons.explore_off_outlined,
+    color: Color(0xFF1565C0),
+    title: 'Not a Travel Destination',
+    description:
+        'Our AI could not identify this photo as a tourist spot, monument, '
+        'or travel-related location. Please make sure your image clearly '
+        'shows the place you have entered.',
+    tips: [
+      'Ensure the location / monument name matches what is in the photo.',
+      'Use a clear, well-lit shot of the destination.',
+      'Avoid blurry or low-quality images — details help the AI.',
+    ],
+  ),
+  ImageRejectionReason.inappropriateContent: _RejectionContent(
+    icon: Icons.block_outlined,
+    color: Color(0xFFC62828),
+    title: 'Content Policy Violation',
+    description:
+        'This image contains content that violates WanderLens community '
+        'guidelines. Please upload an appropriate travel photo.',
+    tips: [
+      'Upload only safe, family-friendly travel photos.',
+      'Review our Community Guidelines for more details.',
+    ],
+  ),
+  ImageRejectionReason.nonPhotoContent: _RejectionContent(
+    icon: Icons.image_not_supported_outlined,
+    color: Color(0xFF6A1B9A),
+    title: 'Not a Real Photograph',
+    description:
+        'The image appears to be a screenshot, graphic, logo, or illustration '
+        'rather than an actual travel photo.',
+    tips: [
+      'Upload a real photograph taken at the destination.',
+      'Screenshots, posters, and digital artwork are not accepted.',
+      'Use JPG or PNG photos taken with a camera or phone.',
+    ],
+  ),
+};
+
+class _RejectionContent {
+  const _RejectionContent({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.description,
+    required this.tips,
+  });
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String description;
+  final List<String> tips;
+}
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -154,55 +225,45 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     final currentUser = await UserService.getCurrentUser();
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be logged in to create a post')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('You must be logged in to create a post')),
+        );
+      }
       return;
     }
 
-    setState(() {
-      _isVerifying = true;
-      _isUploading = true;
-    });
+    // ── Phase 1: Verify with Cloud Vision ───────────────────────────────────
+    setState(() => _isVerifying = true);
 
+    ImageVerificationResult verificationResult;
     try {
-      final isVerified = await ImageVerificationService.verifyTravelImageFromBytes(
+      verificationResult = await ImageVerificationService.verifyPostImage(
         _selectedImageBytes!,
         _locationController.text.trim(),
       );
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
 
-      setState(() => _isVerifying = false);
+    if (!verificationResult.isApproved) {
+      if (mounted) _showRejectionDialog(verificationResult);
+      return;
+    }
 
-      if (!isVerified) {
-        setState(() => _isUploading = false);
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Image Verification Failed'),
-              content: const Text(
-                'Your image doesn\'t appear to show a travel destination, monument, or historical place. Please upload an image that matches our community guidelines.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
+    // ── Phase 2: Upload & save ───────────────────────────────────────────────
+    setState(() => _isUploading = true);
 
-      final uploadedUrl = await CloudinaryService.uploadPostImageFromBytes(_selectedImageBytes!);
+    try {
+      final uploadedUrl = await CloudinaryService.uploadPostImageFromBytes(
+          _selectedImageBytes!);
       if (uploadedUrl == null || uploadedUrl.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to upload image..')),
+            const SnackBar(content: Text('Failed to upload image. Try again.')),
           );
         }
-        setState(() => _isUploading = false);
         return;
       }
 
@@ -247,13 +308,176 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-          _isVerifying = false;
-        });
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  void _showRejectionDialog(ImageVerificationResult result) {
+    final content = _rejectionContent[result.rejectionReason] ??
+        _rejectionContent[ImageRejectionReason.notATravelDestination]!;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Coloured header ──────────────────────────────────────────
+            Container(
+              color: content.color.withValues(alpha: 0.1),
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: content.color.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(content.icon,
+                        size: 32, color: content.color),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Photo Not Accepted',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: content.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Body ─────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    content.title,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    content.description,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        height: 1.5),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── Tips ─────────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: content.color.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: content.color.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.lightbulb_outline,
+                                size: 16, color: content.color),
+                            const SizedBox(width: 6),
+                            Text(
+                              'How to fix this',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: content.color),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ...content.tips.map(
+                          (tip) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text('• ',
+                                    style: TextStyle(
+                                        color: content.color,
+                                        fontWeight: FontWeight.bold)),
+                                Expanded(
+                                  child: Text(tip,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade700,
+                                          height: 1.4)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Actions ──────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.grey.shade400),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showImagePicker();
+                      },
+                      icon: const Icon(Icons.photo_library_outlined,
+                          size: 16),
+                      label: const Text('Choose Another Photo'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: content.color,
+                        foregroundColor: Colors.white,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -270,26 +494,51 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: _isUploading ? null : _createPost,
-            child: _isUploading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: _isVerifying
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Verifying…',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
                   )
-                : Text(
-                    'Post',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                : TextButton(
+                    onPressed: _isUploading ? null : _createPost,
+                    child: _isUploading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          )
+                        : Text(
+                            'Post',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
           ),
-          const SizedBox(width: 16),
         ],
       ),
       body: SingleChildScrollView(
@@ -547,22 +796,50 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Widget _buildAIVerificationInfo() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+        color: Theme.of(context)
+            .colorScheme
+            .secondaryContainer
+            .withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
+          color:
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary),
+          Icon(Icons.cloud_done_outlined,
+              color: Theme.of(context).colorScheme.secondary, size: 20),
           const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Our AI will verify if your photo is a valid travel destination or monument.',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Cloud Vision AI Review',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Every photo is checked for landmarks, tourist spots, and monuments. '
+                  'Selfies without a visible destination and non-travel images are rejected.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSecondaryContainer
+                        .withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
