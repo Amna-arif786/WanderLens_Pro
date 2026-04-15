@@ -1,6 +1,6 @@
 class LocationConstants {
   static const List<String> pakistanCities = [
-    'Karachi', 'Lahore', 'Islamabad', 'Faisalabad', 'Rawalpindi', 'Multan', 'Hyderabad', 'Kashmir',
+    'Other', 'Overseas', 'Karachi', 'Lahore', 'Islamabad', 'Faisalabad', 'Rawalpindi', 'Multan', 'Hyderabad', 'Kashmir',
     'Gujranwala', 'Peshawar', 'Quetta', 'Sargodha', 'Sialkot', 'Bahawalpur', 'Sukkur',
     'Jhang', 'Sheikhupura', 'Larkana', 'Gujrat', 'Mardan', 'Kasur', 'Rahim Yar Khan',
     'Sahiwal', 'Okara', 'Wah Cantonment', 'Dera Ghazi Khan', 'Mirpur Khas', 'Nawabshah',
