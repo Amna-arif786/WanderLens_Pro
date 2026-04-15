@@ -72,6 +72,76 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
+//to delete comment
+  Future<void> _deleteComment(Comment comment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Comment'),
+        content: const Text('Are you sure you want to delete your comment?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await CommentService.deleteComment(widget.post.id, comment.id);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting comment: $e')),
+          );
+        }
+      }
+    }
+  }
+//to edit comment
+  Future<void> _editComment(Comment comment) async {
+    final controller = TextEditingController(text: comment.content);
+    final newContent = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Comment'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Update your comment...'),
+          maxLines: null,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+
+    if (newContent != null && newContent.isNotEmpty && newContent != comment.content) {
+      try {
+        await CommentService.updateComment(widget.post.id, comment.id, newContent);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error updating comment: $e')),
+          );
+        }
+      }
+    }
+  }
 
   void _navigateToProfile(BuildContext context, String userId) {
     Navigator.push(
@@ -199,6 +269,8 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
 
   Widget _buildCommentItem(
       Comment comment, ColorScheme colorScheme, bool isDark) {
+    final isMyComment = comment.userId == widget.currentUserId;
+
     return FutureBuilder<User?>(
       future: UserService.getUserById(comment.userId),
       builder: (context, snapshot) {
@@ -217,16 +289,46 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    GestureDetector(
-                      onTap: () => _navigateToProfile(context, comment.userId),
-                      child: Text(
-                        user?.username ?? '...',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: colorScheme.onSurface,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _navigateToProfile(context, comment.userId),
+                          child: Text(
+                            user?.username ?? '...',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (isMyComment)
+                          PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            icon: Icon(Icons.more_horiz, 
+                              size: 18, 
+                              color: colorScheme.onSurfaceVariant
+                            ),
+                            onSelected: (value) {
+                              if (value == 'edit') {
+                                _editComment(comment);
+                              } else if (value == 'delete') {
+                                _deleteComment(comment);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete', style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(

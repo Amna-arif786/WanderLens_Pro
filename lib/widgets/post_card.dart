@@ -57,7 +57,6 @@ class _PostCardState extends State<PostCard> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('posts').doc(widget.post.id).snapshots(),
@@ -78,57 +77,47 @@ class _PostCardState extends State<PostCard> {
             final bool isLiked = likeSnap.hasData && likeSnap.data!.exists;
 
             return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: colorScheme.outlineVariant.withOpacity(isDark ? 0.2 : 0.5)),
-                boxShadow: [if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 15, offset: const Offset(0, 5))],
+                border: Border(
+                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.2)),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- Header ---
                   _buildHeader(colorScheme),
                   
-                  // --- Image ---
-                  _buildImage(context, colorScheme),
-
-                  // --- Actions ---
+                  // Caption Header ke nichay aur Image ke upar (Bold)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : colorScheme.onSurface),
-                          onPressed: () => _handleLike(isLiked),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.mode_comment_outlined, color: colorScheme.onSurface),
-                          onPressed: _showComments,
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? colorScheme.primary : colorScheme.onSurface),
-                          onPressed: _handleSave,
-                        ),
-                      ],
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      widget.post.caption,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                   ),
 
-                  // --- Caption & Likes ---
+                  _buildFeedImage(context, colorScheme),
+
+                  _buildActions(isLiked, colorScheme),
+
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('$likeCount likes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: colorScheme.onSurface)),
-                        const SizedBox(height: 6),
-                        _buildCaption(colorScheme),
+                        Text(
+                          '$likeCount likes', 
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.onSurface)
+                        ),
                         const SizedBox(height: 8),
                         GestureDetector(
                           onTap: _showComments,
-                          child: Text('View all comments', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13)),
+                          child: Text(
+                            'View all comments', 
+                            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 13)
+                          ),
                         ),
                       ],
                     ),
@@ -142,8 +131,67 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
+  Widget _buildFeedImage(BuildContext context, ColorScheme colorScheme) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PostDetailScreen(
+            post: widget.post,
+            currentUserId: widget.currentUserId,
+          ),
+        ),
+      ),
+      child: ColoredBox(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        child: Image.network(
+          widget.post.imageUrl,
+          width: double.infinity,
+          fit: BoxFit.contain,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          },
+          errorBuilder: (_, __, ___) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Icon(
+              Icons.broken_image_outlined,
+              size: 48,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActions(bool isLiked, ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(isLiked ? Icons.favorite : Icons.favorite_border, color: isLiked ? Colors.red : colorScheme.onSurface, size: 28),
+            onPressed: () => _handleLike(isLiked),
+          ),
+          IconButton(
+            icon: Icon(Icons.mode_comment_outlined, color: colorScheme.onSurface, size: 26),
+            onPressed: _showComments,
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Icon(_isSaved ? Icons.bookmark : Icons.bookmark_border, color: _isSaved ? colorScheme.primary : colorScheme.onSurface, size: 28),
+            onPressed: _handleSave,
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleLike(bool isLiked) async {
-    // UI updates instantly via StreamBuilder
     await LikeService.toggleLike(widget.post.id, widget.currentUserId);
     if (!isLiked && _currentUser != null) {
       await NotificationService.createNotification(
@@ -184,62 +232,34 @@ class _PostCardState extends State<PostCard> {
       builder: (context, snapshot) {
         final author = snapshot.data;
         return Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: widget.post.userId))),
-                child: UserAvatar(imageUrl: author?.profileImageUrl ?? widget.post.userProfileImage, size: 38),
+                child: UserAvatar(imageUrl: author?.profileImageUrl ?? widget.post.userProfileImage, size: 36),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(author?.displayName ?? widget.post.userDisplayName ?? 'User', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: colorScheme.onSurface)),
-                    Row(
-                      children: [
-                        Icon(Icons.place, size: 12, color: colorScheme.primary),
-                        const SizedBox(width: 2),
-                        Text('${widget.post.location}, ${widget.post.cityName}', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
-                        const SizedBox(width: 8),
-                        Text('• ${_getTimeAgo(widget.post.createdAt)}', style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant.withOpacity(0.7))),
-                      ],
+                    Text(
+                      author?.displayName ?? widget.post.userDisplayName ?? 'User', 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.onSurface)
+                    ),
+                    Text(
+                      '${widget.post.cityName} • ${_getTimeAgo(widget.post.createdAt)}', 
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)
                     ),
                   ],
                 ),
               ),
+              // More_vert icon hata diya gaya hai kyunki abhi koi options nahi hain
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildImage(BuildContext context, ColorScheme colorScheme) {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: widget.post, currentUserId: widget.currentUserId))),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(15),
-        child: Image.network(
-          widget.post.imageUrl,
-          width: double.infinity,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) => loadingProgress == null ? child : Container(height: 300, color: colorScheme.surfaceContainerHighest, child: const Center(child: CircularProgressIndicator())),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCaption(ColorScheme colorScheme) {
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(color: colorScheme.onSurface, fontSize: 14),
-        children: [
-          TextSpan(text: '${widget.post.username}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          TextSpan(text: widget.post.caption),
-        ],
-      ),
     );
   }
 }

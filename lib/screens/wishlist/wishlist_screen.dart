@@ -126,7 +126,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF8F00).withOpacity(0.3),
+            color: const Color(0xFFFF8F00).withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -138,7 +138,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(30),
             ),
             child: const Icon(
@@ -163,7 +163,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 Text(
                   '$count saved ${count == 1 ? 'destination' : 'destinations'}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
               ],
@@ -211,7 +211,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
             Text(
               'Save posts from your feed or explore page to build your travel wishlist. Tap the bookmark icon on any post!',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               textAlign: TextAlign.center,
             ),

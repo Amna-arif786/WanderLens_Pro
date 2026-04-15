@@ -37,13 +37,13 @@ class ImageVerificationConfig {
     'sunset', 'sunrise', 'twilight',
   ];
 
-  // ── Outdoor scene keywords (kept for ML Kit face-context check) ──────────
+  //  Outdoor scene keywords (kept for ML Kit face-context check)
   static const List<String> outdoorSceneKeywords = [
     'building', 'architecture', 'landscape', 'mountain', 'water',
     'road', 'street', 'monument', 'beach', 'forest', 'scenery', 'wall',
   ];
 
-  // ── Hard-reject label keywords ────────────────────────────────────────────
+  //  Hard-reject label keywords
   // Any match → image is rejected as non-photo content.
   static const List<String> rejectedKeywords = [
     // Graphics / digital art

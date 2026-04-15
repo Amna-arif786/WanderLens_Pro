@@ -11,7 +11,7 @@ import 'package:wanderlens/widgets/user_avatar.dart';
 import '../responsive/constrained_scaffold.dart';
 
 class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key});
+  MainNavigation({Key? key}) : super(key: key ?? navigationKey);
 
   static final GlobalKey<MainNavigationState> navigationKey = GlobalKey<MainNavigationState>();
 
@@ -21,24 +21,30 @@ class MainNavigation extends StatefulWidget {
 
 class MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  
+  // Screen key taake create post screen refresh ho sake
+  Key _createScreenKey = UniqueKey();
 
   void switchTab(int index) {
     setState(() {
       _currentIndex = index;
+      if (index == 2) {
+        _createScreenKey = UniqueKey(); // Create tab pr jaty hi refresh
+      }
     });
   }
-
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const ExploreScreen(),
-    const CreatePostScreen(),
-    const WishlistScreen(),
-    const ProfileScreen(),
-  ];
 
   @override
   Widget build(BuildContext context) {
     final String uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    final List<Widget> _screens = [
+      const HomeScreen(),
+      const ExploreScreen(),
+      CreatePostScreen(key: _createScreenKey), // Key di hai taake refresh ho sake
+      const WishlistScreen(),
+      const ProfileScreen(),
+    ];
 
     return ConstrainedScaffold(
       body: IndexedStack(
@@ -67,7 +73,7 @@ class MainNavigationState extends State<MainNavigation> {
 
             return BottomNavigationBar(
               currentIndex: _currentIndex,
-              onTap: (index) => setState(() => _currentIndex = index),
+              onTap: switchTab,
               type: BottomNavigationBarType.fixed,
               backgroundColor: Colors.transparent,
               elevation: 0,
@@ -80,7 +86,7 @@ class MainNavigationState extends State<MainNavigation> {
                 const BottomNavigationBarItem(icon: Icon(Icons.bookmark_border), activeIcon: Icon(Icons.bookmark), label: 'Wishlist'),
                 BottomNavigationBarItem(
                   icon: UserAvatar(
-                    key: ValueKey(profileUrl), // Force rebuild when URL changes
+                    key: ValueKey(profileUrl), 
                     imageUrl: profileUrl, 
                     size: 24
                   ),

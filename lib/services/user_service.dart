@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:wanderlens/models/user.dart';
+import 'package:wanderlens/services/account_deletion_service.dart';
 
 class UserService {
   static final auth.FirebaseAuth _auth = auth.FirebaseAuth.instance;
@@ -128,4 +128,52 @@ class UserService {
     final snapshot = await _firestore.collection('users').limit(limit).get();
     return snapshot.docs.map((doc) => User.fromJson(doc.data())).where((u) => u.id != currentUserId).toList();
   }
+
+  /// Permanently deletes the signed-in account: Firestore data, then Firebase Auth.
+  ///
+  /// [password] is required when the account uses email/password (re-auth).
+  /// Google-only accounts are deleted without a password; if Firebase returns
+  /// `requires-recent-login`, the caller should ask the user to sign in again.
+  static Future<void> deleteAccount({String? password}) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('You are not signed in.');
+
+    final hasPasswordProvider =
+        user.providerData.any((p) => p.providerId == 'password');
+
+    if (hasPasswordProvider) {
+      if (password == null || password.isEmpty) {
+        throw Exception('Enter your password to confirm account deletion.');
+      }
+      if (user.email == null) {
+        throw Exception('This account has no email; cannot verify password.');
+      }
+      final cred = auth.EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+      try {
+        await user.reauthenticateWithCredential(cred);
+      } on auth.FirebaseAuthException catch (e) {
+        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          throw Exception('Incorrect password.');
+        }
+        throw Exception(e.message ?? 'Could not verify your identity.');
+      }
+    }
+
+    await AccountDeletionService.purgeUserData(user.uid);
+
+    try {
+      await user.delete();
+    } on auth.FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        throw Exception(
+          'For security, sign out, sign in again, then delete your account from Settings.',
+        );
+      }
+      throw Exception(e.message ?? 'Failed to delete auth account.');
+    }
+  }
+
 }

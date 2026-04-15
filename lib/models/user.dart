@@ -9,6 +9,10 @@ class User {
   final int friendCount;
   final int postCount;
   final bool isVerified;
+
+  /// Set to true manually in Firestore for trusted admins.
+  final bool isAdmin;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +27,7 @@ class User {
     this.friendCount = 0,
     this.postCount = 0,
     this.isVerified = false,
+    this.isAdmin = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -39,6 +44,7 @@ class User {
       'friendCount': friendCount,
       'postCount': postCount,
       'isVerified': isVerified,
+      'isAdmin': isAdmin,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -56,6 +62,7 @@ class User {
       friendCount: json['friendCount'] ?? 0,
       postCount: json['postCount'] ?? 0,
       isVerified: json['isVerified'] ?? false,
+      isAdmin: json['isAdmin'] ?? false,
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       updatedAt: DateTime.parse(json['updatedAt'] ?? DateTime.now().toIso8601String()),
     );
@@ -72,6 +79,7 @@ class User {
     int? friendCount,
     int? postCount,
     bool? isVerified,
+    bool? isAdmin,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -86,6 +94,7 @@ class User {
       friendCount: friendCount ?? this.friendCount,
       postCount: postCount ?? this.postCount,
       isVerified: isVerified ?? this.isVerified,
+      isAdmin: isAdmin ?? this.isAdmin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

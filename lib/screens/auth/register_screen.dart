@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:wanderlens/screens/main_navigation.dart';
 import 'package:wanderlens/services/user_service.dart';
 import '../../responsive/constrained_scaffold.dart';
-import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -52,8 +51,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       
       if (mounted) {
+        // Ensure MainNavigation is not called with const
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainNavigation()),
+          MaterialPageRoute(builder: (context) => MainNavigation()),
         );
       }
     } catch (e) {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wanderlens/models/notification_model.dart';
 import 'package:wanderlens/services/notification_service.dart';
+import 'package:wanderlens/services/post_service.dart';
+import 'package:wanderlens/screens/post/post_detail_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 import 'package:intl/intl.dart';
 import '../../responsive/constrained_scaffold.dart';
@@ -61,7 +63,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_off_outlined, size: 80, color: colorScheme.primary.withOpacity(0.2)),
+                  Icon(Icons.notifications_off_outlined, size: 80, color: colorScheme.primary.withValues(alpha: 0.2)),
                   const SizedBox(height: 16),
                   const Text('No notifications yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
@@ -73,7 +75,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notification = notifications[index];
-              return _NotificationTile(notification: notification);
+              return _NotificationTile(
+                notification: notification,
+                currentUserId: _currentUserId,
+              );
             },
           );
         },
@@ -84,19 +89,46 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
 class _NotificationTile extends StatelessWidget {
   final NotificationModel notification;
+  final String currentUserId;
 
-  const _NotificationTile({required this.notification});
+  const _NotificationTile({
+    required this.notification,
+    required this.currentUserId,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
-      color: notification.isRead ? Colors.transparent : colorScheme.primaryContainer.withOpacity(0.05),
+      color: notification.isRead ? Colors.transparent : colorScheme.primaryContainer.withValues(alpha: 0.05),
       child: ListTile(
-        onTap: () {
-          NotificationService.markAsRead(notification.id);
-          // Navigate to post or profile if needed
+        onTap: () async {
+          await NotificationService.markAsRead(notification.id);
+
+          final postId = notification.postId;
+          if (postId == null || postId.isEmpty) return;
+
+          final post = await PostService.getPostById(postId);
+          if (!context.mounted) return;
+
+          if (post == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Post not found.')),
+            );
+            return;
+          }
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(
+                post: post,
+                currentUserId: currentUserId,
+                focusComment: notification.type == NotificationType.comment,
+              ),
+            ),
+          );
         },
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: UserAvatar(imageUrl: notification.senderProfilePic, size: 48),

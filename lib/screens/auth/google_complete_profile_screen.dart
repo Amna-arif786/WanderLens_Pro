@@ -70,7 +70,7 @@ class _GoogleCompleteProfileScreenState extends State<GoogleCompleteProfileScree
 
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const MainNavigation()),
+          MaterialPageRoute(builder: (context) =>  MainNavigation()),
           (route) => false,
         );
       }

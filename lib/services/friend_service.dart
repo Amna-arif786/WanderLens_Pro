@@ -29,17 +29,6 @@ class FriendService {
       if (doc.exists) {
         return FriendRequest.fromJson(doc.data()!);
       }
-
-      final snapshot = await _firestore
-          .collection('friend_requests')
-          .where('senderId', isEqualTo: senderId)
-          .where('receiverId', isEqualTo: receiverId)
-          .limit(1)
-          .get();
-      
-      if (snapshot.docs.isNotEmpty) {
-        return FriendRequest.fromJson(snapshot.docs.first.data());
-      }
       return null;
     } catch (e) {
       return null;
@@ -53,7 +42,7 @@ class FriendService {
 
     final areFriends = await areUsersFriends(senderId, receiverId);
     if (areFriends) {
-      throw Exception('Already following this user');
+      throw Exception('Already friends');
     }
 
     final docId = '${senderId}_$receiverId';
@@ -78,7 +67,6 @@ class FriendService {
 
     await docRef.set(request.toJson());
 
-    // Send Notification
     final sender = await UserService.getUserById(senderId);
     if (sender != null) {
       await NotificationService.createNotification(
@@ -99,20 +87,10 @@ class FriendService {
       if (doc.exists) {
         final request = FriendRequest.fromJson(doc.data()!);
         
-        final duplicates = await _firestore.collection('friend_requests')
-            .where('senderId', isEqualTo: request.senderId)
-            .where('receiverId', isEqualTo: request.receiverId)
-            .where('status', isEqualTo: FriendRequestStatus.pending.name)
-            .get();
-
-        final batch = _firestore.batch();
-        for (var d in duplicates.docs) {
-          batch.update(d.reference, {
-            'status': FriendRequestStatus.accepted.name,
-            'updatedAt': DateTime.now().toIso8601String(),
-          });
-        }
-        await batch.commit();
+        await docRef.update({
+          'status': FriendRequestStatus.accepted.name,
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
 
         await _createFriendship(request.senderId, request.receiverId);
       }
@@ -124,26 +102,10 @@ class FriendService {
   static Future<void> rejectFriendRequest(String requestId) async {
     try {
       final docRef = _firestore.collection('friend_requests').doc(requestId);
-      final doc = await docRef.get();
-      
-      if (doc.exists) {
-        final request = FriendRequest.fromJson(doc.data()!);
-        
-        final duplicates = await _firestore.collection('friend_requests')
-            .where('senderId', isEqualTo: request.senderId)
-            .where('receiverId', isEqualTo: request.receiverId)
-            .where('status', isEqualTo: FriendRequestStatus.pending.name)
-            .get();
-
-        final batch = _firestore.batch();
-        for (var d in duplicates.docs) {
-          batch.update(d.reference, {
-            'status': FriendRequestStatus.rejected.name,
-            'updatedAt': DateTime.now().toIso8601String(),
-          });
-        }
-        await batch.commit();
-      }
+      await docRef.update({
+        'status': FriendRequestStatus.rejected.name,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       throw Exception('Failed to reject request: $e');
     }
@@ -155,30 +117,33 @@ class FriendService {
       if (doc1.exists) return true;
       
       final doc2 = await _firestore.collection('user_friends').doc('${userId2}_$userId1').get();
-      if (doc2.exists) return true;
-
-      final snapshot = await _firestore
-          .collection('user_friends')
-          .where('userId', isEqualTo: userId1)
-          .where('friendId', isEqualTo: userId2)
-          .limit(1)
-          .get();
-      
-      if (snapshot.docs.isNotEmpty) return true;
-
-      final reverseSnapshot = await _firestore
-          .collection('user_friends')
-          .where('userId', isEqualTo: userId2)
-          .where('friendId', isEqualTo: userId1)
-          .limit(1)
-          .get();
-          
-      return reverseSnapshot.docs.isNotEmpty;
+      return doc2.exists;
     } catch (e) {
       return false;
     }
   }
 
+  /// Get list of users who follow the given [userId].
+  static Future<List<User>> getFollowers(String userId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('user_friends')
+          .where('friendId', isEqualTo: userId)
+          .get();
+
+      final followers = <User>[];
+      for (final doc in snapshot.docs) {
+        final data = UserFriend.fromJson(doc.data());
+        final user = await UserService.getUserById(data.userId);
+        if (user != null) followers.add(user);
+      }
+      return followers;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Get list of users that the given [userId] is following.
   static Future<List<User>> getFollowing(String userId) async {
     try {
       final snapshot = await _firestore
@@ -225,25 +190,6 @@ class FriendService {
     }
   }
 
-  static Future<List<User>> getFollowers(String userId) async {
-    try {
-      final snapshot = await _firestore
-          .collection('user_friends')
-          .where('friendId', isEqualTo: userId)
-          .get();
-      
-      List<User> followers = [];
-      for (var doc in snapshot.docs) {
-        final friendData = UserFriend.fromJson(doc.data());
-        final user = await UserService.getUserById(friendData.userId);
-        if (user != null) followers.add(user);
-      }
-      return followers;
-    } catch (e) {
-      return [];
-    }
-  }
-
   static Future<void> _createFriendship(String userId1, String userId2) async {
     final docId = '${userId1}_$userId2';
     final docRef = _firestore.collection('user_friends').doc(docId);
@@ -276,26 +222,6 @@ class FriendService {
       await _firestore.collection('user_friends').doc('${userId1}_$userId2').delete();
       await _firestore.collection('user_friends').doc('${userId2}_$userId1').delete();
 
-      final snapshot = await _firestore
-          .collection('user_friends')
-          .where('userId', isEqualTo: userId1)
-          .where('friendId', isEqualTo: userId2)
-          .get();
-      
-      for (var doc in snapshot.docs) {
-        await doc.reference.delete();
-      }
-
-      final reverseSnapshot = await _firestore
-          .collection('user_friends')
-          .where('userId', isEqualTo: userId2)
-          .where('friendId', isEqualTo: userId1)
-          .get();
-          
-      for (var doc in reverseSnapshot.docs) {
-        await doc.reference.delete();
-      }
-
       final user1 = await UserService.getUserById(userId1);
       final user2 = await UserService.getUserById(userId2);
       
@@ -306,22 +232,13 @@ class FriendService {
         await UserService.updateUser(user2.copyWith(friendCount: user2.friendCount - 1));
       }
       
-      final reqSnapshot = await _firestore
-          .collection('friend_requests')
-          .where('senderId', whereIn: [userId1, userId2])
-          .get();
+      final doc1 = '${userId1}_$userId2';
+      final doc2 = '${userId2}_$userId1';
+      await _firestore.collection('friend_requests').doc(doc1).delete();
+      await _firestore.collection('friend_requests').doc(doc2).delete();
       
-      for (var doc in reqSnapshot.docs) {
-        final data = doc.data();
-        if ((data['senderId'] == userId1 && data['receiverId'] == userId2) ||
-            (data['senderId'] == userId2 && data['receiverId'] == userId1)) {
-          await doc.reference.delete();
-        }
-      }
     } catch (e) {
-      throw Exception('Failed to unfollow: $e');
+      throw Exception('Failed to unfriend: $e');
     }
   }
-
-  static Future<void> firebase() async {}
 }

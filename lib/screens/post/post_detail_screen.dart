@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:wanderlens/models/post.dart';
@@ -95,17 +96,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       case PostPrivacy.public: return Icons.public;
       case PostPrivacy.friends: return Icons.group;
       case PostPrivacy.private: return Icons.lock;
-      default: return Icons.public;
     }
   }
 
-  // Privacy Text Helper
   String _getPrivacyText(PostPrivacy privacy) {
     switch (privacy) {
-      case PostPrivacy.public: return "Public";
-      case PostPrivacy.friends: return "Friends";
-      case PostPrivacy.private: return "Only Me";
-      default: return "Public";
+      case PostPrivacy.public: return 'Public';
+      case PostPrivacy.friends: return 'Friends';
+      case PostPrivacy.private: return 'Only Me';
     }
   }
 
@@ -281,10 +279,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   privacy: finalPrivacy,
                 );
 
+                final nav = Navigator.of(context);
                 await PostService.updatePost(updatedPost);
                 setState(() => _editedPost = updatedPost);
                 if (mounted) {
-                  Navigator.pop(context);
+                  nav.pop();
                   widget.onPostUpdated?.call();
                 }
               },
@@ -363,8 +362,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
+              final nav = Navigator.of(context);
               await CommentService.updateComment(_displayPost.id, comment.id, controller.text);
-              Navigator.pop(context);
+              nav.pop();
               _loadPostDetails();
             },
             child: const Text('Update'),
@@ -410,6 +410,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               padding: const EdgeInsets.all(0),
               children: [
                 _buildPostHeader(),
+                // Caption moved up here
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Text(
+                    _displayPost.caption,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
                 _buildPostImage(),
                 _buildActionButtons(),
                 const Divider(),
@@ -456,7 +464,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           Text(
             _getPrivacyText(_displayPost.privacy),
             style: TextStyle(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
@@ -494,31 +502,57 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Text(
-              '${_displayPost.likeCount} likes',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4),
-            child: RichText(
-              text: TextSpan(
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                children: [
-                  WidgetSpan(
-                    child: GestureDetector(
-                      onTap: () => _navigateToProfile(_displayPost.userId),
-                      child: Text('${_postAuthor?.username ?? ""} ',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+          
+          // Liked By Section
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('posts')
+                .doc(_displayPost.id)
+                .collection('likes')
+                .limit(1)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              
+              final firstLikeUserId = snapshot.data!.docs.first.id;
+              
+              return FutureBuilder<User?>(
+                future: UserService.getUserById(firstLikeUserId),
+                builder: (context, userSnap) {
+                  final likeAuthor = userSnap.data;
+                  final count = _displayPost.likeCount;
+                  
+                  if (likeAuthor == null) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2),
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13),
+                        children: [
+                          const TextSpan(text: 'Liked by '),
+                          TextSpan(
+                            text: likeAuthor.username,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          if (count > 1) ...[
+                            const TextSpan(text: ' and '),
+                            TextSpan(
+                              text: '${count - 1} others',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-                  TextSpan(text: _displayPost.caption),
-                ],
-              ),
-            ),
+                  );
+                },
+              );
+            },
           ),
+          // Caption removed from here (moved to ListView)
         ],
       ),
     );

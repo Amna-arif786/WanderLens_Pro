@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:wanderlens/models/notification_model.dart';
 import 'package:wanderlens/models/user.dart';
 import 'package:uuid/uuid.dart';
@@ -33,7 +34,7 @@ class NotificationService {
     try {
       await _firestore.collection(_collection).doc(id).set(notification.toJson());
     } catch (e) {
-      print('Error creating notification: $e');
+      debugPrint('Error creating notification: $e');
     }
   }
 

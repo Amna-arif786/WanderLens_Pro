@@ -1,5 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wanderlens/screens/auth/login_screen.dart';
+import 'package:wanderlens/screens/settings/policy_screen.dart';
+import 'package:wanderlens/screens/settings/help_support_screen.dart';
+import 'package:wanderlens/services/auth_service.dart';
 import 'package:wanderlens/services/theme_service.dart';
 import 'package:wanderlens/services/user_service.dart';
 import '../../responsive/constrained_scaffold.dart';
@@ -51,27 +56,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          _buildSectionHeader(context, 'Account'),
+          _buildSettingCard(
+            context,
+            child: ListTile(
+              leading: Icon(Icons.person_off_outlined, color: colorScheme.error),
+              title: Text(
+                'Delete account',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.error,
+                ),
+              ),
+              subtitle: const Text(
+                'Permanently remove your profile, posts, and data',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: Icon(Icons.arrow_forward_ios, size: 14, color: colorScheme.error),
+              onTap: () => _onDeleteAccountTapped(context),
+            ),
+          ),
+
           _buildSectionHeader(context, 'Support & About'),
           _buildSettingCard(
             context,
             child: Column(
               children: [
+                ListTile(
+                  leading: Icon(Icons.support_agent_rounded, color: colorScheme.primary),
+                  title: const Text('Help & Support', style: TextStyle(fontWeight: FontWeight.w500)),
+                  subtitle: const Text('Message our team', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HelpSupportScreen()),
+                  ),
+                ),
+                Divider(height: 1, indent: 55, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 const ListTile(
                   leading: Icon(Icons.info_outline_rounded),
                   title: Text('Version'),
                   trailing: Text('1.0.0', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
                 ),
-                Divider(height: 1, indent: 55, color: colorScheme.outlineVariant.withOpacity(0.5)),
+                Divider(height: 1, indent: 55, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 ListTile(
                     leading: const Icon(Icons.description_outlined),
                     title: const Text('Terms of Service'),
-                    onTap: () {}
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const PolicyScreen(type: PolicyType.terms),
+                      ),
+                    ),
                 ),
-                Divider(height: 1, indent: 55, color: colorScheme.outlineVariant.withOpacity(0.5)),
+                Divider(height: 1, indent: 55, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 ListTile(
                     leading: const Icon(Icons.privacy_tip_outlined),
                     title: const Text('Privacy Policy'),
-                    onTap: () {}
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const PolicyScreen(type: PolicyType.privacy),
+                      ),
+                    ),
                 ),
               ],
             ),
@@ -103,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.4)),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: child,
@@ -117,6 +168,161 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => const PasswordSheetWidget(),
     );
+  }
+
+  Future<void> _onDeleteAccountTapped(BuildContext context) async {
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser == null) return;
+
+    final wantsContinue = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Theme.of(ctx).colorScheme.error),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Delete account?')),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Text(
+            'This permanently deletes your WanderLens account and cannot be undone.\n\n'
+            'Your posts, comments, likes, friend connections, wishlist, and notifications '
+            'linked to this account will be removed.\n\n'
+            'If you use email sign-in, you will need your password on the next step.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (wantsContinue != true || !context.mounted) return;
+
+    final needsPassword = authUser.providerData.any((p) => p.providerId == 'password');
+    final passwordController = TextEditingController();
+    bool obscure = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Final confirmation'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  needsPassword
+                      ? 'Enter your password to confirm deletion.'
+                      : 'Tap Delete to permanently remove your account. If this fails, sign out, sign in again, and retry.',
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                ),
+                if (needsPassword) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                        onPressed: () => setLocal(() => obscure = !obscure),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              onPressed: () {
+                if (needsPassword && passwordController.text.trim().isEmpty) {
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Delete my account'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      passwordController.dispose();
+      return;
+    }
+
+    final password = needsPassword ? passwordController.text : null;
+    passwordController.dispose();
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const PopScope(
+        canPop: false,
+        child: Center(child: Card(child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Deleting account…'),
+            ],
+          ),
+        ))),
+      ),
+    );
+
+    try {
+      await UserService.deleteAccount(password: password);
+      await AuthService.signOut();
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 

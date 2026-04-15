@@ -87,7 +87,8 @@ class CommentService {
           .doc(commentId)
           .update({
         'content': content,
-        'updatedAt': FieldValue.serverTimestamp(),
+        //update comment date
+        'updatedAt': DateTime.now().toIso8601String(),
       });
     } catch (e) {
       throw Exception('Failed to update comment: $e');

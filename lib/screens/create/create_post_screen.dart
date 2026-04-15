@@ -7,12 +7,13 @@ import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/services/image_verification_service.dart';
 import 'package:wanderlens/storage/cloudinary_service.dart';
 import 'package:wanderlens/screens/main_navigation.dart';
+import 'package:wanderlens/screens/post/post_detail_screen.dart';
 import 'package:wanderlens/utils/location_constants.dart';
 import '../../responsive/constrained_scaffold.dart';
 
-// Rejection dialog content per reason
+// Hard-rejection dialog content keyed by rejection reason
 const Map<ImageRejectionReason, _RejectionContent> _rejectionContent = {
-  ImageRejectionReason.facesWithoutDestination: _RejectionContent(
+  ImageRejectionReason.facesDetected: _RejectionContent(
     icon: Icons.face_retouching_off_outlined,
     color: Color(0xFFE65100),
     title: 'Human Face Detected',
@@ -94,6 +95,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _captionController = TextEditingController();
   final _locationController = TextEditingController();
   final _cityController = TextEditingController();
+  
+  Key _cityFieldKey = UniqueKey();
   
   Uint8List? _selectedImageBytes;
   PostPrivacy _privacy = PostPrivacy.public;
@@ -234,71 +237,84 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
-    // ── Phase 1: Verify with Cloud Vision ───────────────────────────────────
-    setState(() => _isVerifying = true);
-
-    ImageVerificationResult verificationResult;
-    try {
-      verificationResult = await ImageVerificationService.verifyPostImage(
-        _selectedImageBytes!,
-        _locationController.text.trim(),
-      );
-    } finally {
-      if (mounted) setState(() => _isVerifying = false);
-    }
-
-    if (!verificationResult.isApproved) {
-      if (mounted) _showRejectionDialog(verificationResult);
-      return;
-    }
-
-    // ── Phase 2: Upload & save ───────────────────────────────────────────────
     setState(() => _isUploading = true);
 
     try {
-      final uploadedUrl = await CloudinaryService.uploadPostImageFromBytes(
-          _selectedImageBytes!);
-      if (uploadedUrl == null || uploadedUrl.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to upload image. Try again.')),
-          );
-        }
+      final upload = await CloudinaryService.uploadPostImageFromBytes(_selectedImageBytes!);
+      
+      if (upload == null) {
+        setState(() => _isUploading = false);
         return;
       }
 
-      await PostService.createPost(
+      setState(() {
+        _isUploading = false;
+        _isVerifying = true;
+      });
+
+      final verificationResult = await ImageVerificationService.verifyPostImage(
+        _selectedImageBytes!,
+        _locationController.text.trim(),
+        imageUrl: upload.secureUrl,
+        cloudinaryUpload: upload,
+      );
+
+      setState(() => _isVerifying = false);
+
+      if (verificationResult.isHardRejected) {
+        await CloudinaryService.deleteImage(upload.publicId);
+        if (mounted) _showRejectionDialog(verificationResult);
+        return;
+      }
+
+      final postStatus = verificationResult.isApproved
+          ? PostStatus.approved
+          : PostStatus.pending;
+
+      final newPost = await PostService.createPost(
         userId: currentUser.id,
-        imageUrl: uploadedUrl,
+        imageUrl: upload.secureUrl,
+        cloudinaryPublicId: upload.publicId,
         caption: _captionController.text.trim(),
         location: _locationController.text.trim(),
         cityName: _cityController.text.trim(),
         privacy: _privacy,
+        status: postStatus,
+        aiConfidenceScore: verificationResult.topLandmarkConfidence,
+        aiDetectedLabels: verificationResult.detectedLabels,
+        aiVerificationSource: verificationResult.verificationSource.name,
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Post created successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
         _captionController.clear();
         _locationController.clear();
         _cityController.clear();
         setState(() {
           _selectedImageBytes = null;
           _privacy = PostPrivacy.public;
+          _cityFieldKey = UniqueKey();
         });
 
-        if (MainNavigation.navigationKey.currentState != null) {
-          MainNavigation.navigationKey.currentState!.switchTab(0);
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const MainNavigation()),
-            (route) => false,
+        if (verificationResult.isApproved) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Post published successfully!'), backgroundColor: Colors.green),
           );
+          
+          if (MainNavigation.navigationKey.currentState != null) {
+            MainNavigation.navigationKey.currentState!.switchTab(0);
+          }
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PostDetailScreen(
+                post: newPost,
+                currentUserId: currentUser.id,
+              ),
+            ),
+          );
+        } else {
+          _showPendingDialog();
         }
       }
     } catch (e) {
@@ -308,13 +324,84 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _isVerifying = false;
+        });
+      }
     }
+  }
+
+  void _showPendingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: const Color(0xFFFFF8E1),
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(color: Color(0xFFFFF3CD), shape: BoxShape.circle),
+                    child: const Icon(Icons.hourglass_top_rounded, size: 32, color: Color(0xFFF57F17)),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Post Under Review', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFF57F17))),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Your photo has been saved and is awaiting admin review.', style: TextStyle(fontSize: 14, height: 1.5)),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFFFFF8E1), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFFCC02).withValues(alpha: 0.5))),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [Icon(Icons.info_outline, size: 15, color: Color(0xFFF57F17)), SizedBox(width: 6), Text('What happens next?', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFFF57F17)))]),
+                        SizedBox(height: 8),
+                        Text('• Our AI couldn\'t verify the destination with high confidence.\n• An admin will review your photo within 24 hours.\n• It will appear in the public feed once approved.', style: TextStyle(fontSize: 12, height: 1.5, color: Colors.black87)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (MainNavigation.navigationKey.currentState != null) MainNavigation.navigationKey.currentState!.switchTab(0);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF57F17), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                child: const Text('Got it, take me home'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showRejectionDialog(ImageVerificationResult result) {
     final content = _rejectionContent[result.rejectionReason] ??
-        _rejectionContent[ImageRejectionReason.notATravelDestination]!;
+        _rejectionContent[ImageRejectionReason.nonPhotoContent]!;
 
     showDialog(
       context: context,
@@ -326,7 +413,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Coloured header ──────────────────────────────────────────
             Container(
               color: content.color.withValues(alpha: 0.1),
               padding: const EdgeInsets.symmetric(vertical: 24),
@@ -335,142 +421,60 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   Container(
                     width: 64,
                     height: 64,
-                    decoration: BoxDecoration(
-                      color: content.color.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(content.icon,
-                        size: 32, color: content.color),
+                    decoration: BoxDecoration(color: content.color.withValues(alpha: 0.15), shape: BoxShape.circle),
+                    child: Icon(content.icon, size: 32, color: content.color),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'Photo Not Accepted',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: content.color,
-                    ),
-                  ),
+                  Text('Photo Not Accepted', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: content.color)),
                 ],
               ),
             ),
-
-            // ── Body ─────────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    content.title,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
+                  Text(content.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
-                  Text(
-                    content.description,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade700,
-                        height: 1.5),
-                  ),
+                  Text(content.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5)),
                   const SizedBox(height: 16),
-
-                  // ── Tips ─────────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: content.color.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: content.color.withValues(alpha: 0.2)),
-                    ),
+                    decoration: BoxDecoration(color: content.color.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12), border: Border.all(color: content.color.withValues(alpha: 0.2))),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.lightbulb_outline,
-                                size: 16, color: content.color),
-                            const SizedBox(width: 6),
-                            Text(
-                              'How to fix this',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: content.color),
-                            ),
-                          ],
-                        ),
+                        Row(children: [Icon(Icons.lightbulb_outline, size: 16, color: content.color), const SizedBox(width: 6), Text('How to fix this', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: content.color))]),
                         const SizedBox(height: 8),
-                        ...content.tips.map(
-                          (tip) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text('• ',
-                                    style: TextStyle(
-                                        color: content.color,
-                                        fontWeight: FontWeight.bold)),
-                                Expanded(
-                                  child: Text(tip,
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade700,
-                                          height: 1.4)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                        ...content.tips.map((tip) => Padding(padding: const EdgeInsets.only(bottom: 4), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('• ', style: TextStyle(color: content.color, fontWeight: FontWeight.bold)), Expanded(child: Text(tip, style: TextStyle(fontSize: 12, color: Colors.grey.shade700, height: 1.4)))]))),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-
-            // ── Actions ──────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               child: Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
-                        side: BorderSide(color: Colors.grey.shade400),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
+                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.grey.shade400), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showImagePicker();
-                      },
-                      icon: const Icon(Icons.photo_library_outlined,
-                          size: 16),
-                      label: const Text('Choose Another Photo'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: content.color,
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ),
+                  Expanded(flex: 2, child: ElevatedButton.icon(
+                    onPressed: () { 
+                      Navigator.pop(ctx);
+                      // Reject hony pr fields empty krna
+                      _captionController.clear();
+                      _cityController.clear();
+                      setState(() {
+                        _selectedImageBytes = null;
+                        _cityFieldKey = UniqueKey();
+                      });
+                      _showImagePicker(); 
+                    }, 
+                    icon: const Icon(Icons.photo_library_outlined, size: 16), 
+                    label: const Text('Choose Another Photo'), 
+                    style: ElevatedButton.styleFrom(backgroundColor: content.color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))
+                  )),
                 ],
               ),
             ),
@@ -487,57 +491,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(
-          'Create Post',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: Text('Create Post', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: _isVerifying
+            child: (_isUploading || _isVerifying)
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
+                      SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
                       const SizedBox(width: 6),
-                      Text(
-                        'Verifying…',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
+                      Text(_isUploading ? 'Uploading…' : 'Verifying…', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600, fontSize: 13)),
                     ],
                   )
-                : TextButton(
-                    onPressed: _isUploading ? null : _createPost,
-                    child: _isUploading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          )
-                        : Text(
-                            'Post',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                  ),
+                : TextButton(onPressed: _createPost, child: Text('Post', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600))),
           ),
         ],
       ),
@@ -568,48 +535,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       child: Container(
         width: double.infinity,
         height: 300,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-            width: 2,
-            style: BorderStyle.solid,
-          ),
-        ),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16), border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3), width: 2, style: BorderStyle.solid)),
         child: _selectedImageBytes != null
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.memory(
-                  _selectedImageBytes!,
-                  fit: BoxFit.contain,
-                  width: double.infinity,
-                  height: double.infinity,
-                ),
-              )
+            ? ClipRRect(borderRadius: BorderRadius.circular(14), child: Image.memory(_selectedImageBytes!, fit: BoxFit.contain, width: double.infinity, height: double.infinity))
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.add_a_photo,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  Icon(Icons.add_a_photo, size: 64, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(height: 16),
-                  Text(
-                    'Add Photo',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text('Add Photo', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  Text(
-                    'Share your travel moments',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
+                  Text('Share your travel moments', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
                 ],
               ),
       ),
@@ -621,79 +557,40 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       children: [
         TextFormField(
           controller: _captionController,
-          decoration: InputDecoration(
-            labelText: 'Caption',
-            hintText: 'Share your experience...',
-            prefixIcon: Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+          decoration: InputDecoration(labelText: 'Caption', hintText: 'Share your experience...', prefixIcon: Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
           maxLines: 3,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter a caption';
-            }
-            return null;
-          },
+          validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter a caption' : null,
         ),
         const SizedBox(height: 16),
         TextFormField(
           controller: _locationController,
-          decoration: InputDecoration(
-            labelText: 'Tourist Spot/Location Name/Monument',
-            hintText: 'e.g., Badshahi Mosque, Faisal Masjid',
-            prefixIcon: Icon(Icons.place_outlined, color: Theme.of(context).colorScheme.primary),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter the location or monument name';
-            }
-            return null;
-          },
+          decoration: InputDecoration(labelText: 'Tourist Spot/Location Name/Monument', hintText: 'e.g., Badshahi Mosque, Faisal Masjid', prefixIcon: Icon(Icons.place_outlined, color: Theme.of(context).colorScheme.primary), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter the location or monument name' : null,
         ),
         const SizedBox(height: 16),
         Autocomplete<String>(
+          key: _cityFieldKey,
           optionsBuilder: (TextEditingValue textEditingValue) {
             if (textEditingValue.text.isEmpty) {
-              return const Iterable<String>.empty();
+              return const ['Other', 'Overseas'];
             }
-            return LocationConstants.pakistanCities.where((String city) {
-              return city.toLowerCase().contains(textEditingValue.text.toLowerCase());
-            });
+            return LocationConstants.pakistanCities.where((String city) => 
+                city.toLowerCase().contains(textEditingValue.text.toLowerCase()));
           },
-          onSelected: (String selection) {
-            _cityController.text = selection;
-          },
+          onSelected: (String selection) => _cityController.text = selection,
           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            if (controller.text.isEmpty && _cityController.text.isNotEmpty) {
-              controller.text = _cityController.text;
-            }
-            controller.addListener(() {
-              _cityController.text = controller.text;
-            });
-
             return TextFormField(
-              controller: controller,
-              focusNode: focusNode,
-              onFieldSubmitted: (value) => onFieldSubmitted(),
+              controller: controller, 
+              focusNode: focusNode, 
+              onFieldSubmitted: (value) => onFieldSubmitted(), 
               decoration: InputDecoration(
-                labelText: 'City',
-                hintText: 'e.g., Lahore, Karachi, Islamabad',
-                prefixIcon: Icon(Icons.location_city_outlined, color: Theme.of(context).colorScheme.primary),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter the city name';
-                }
-                return null;
-              },
+                labelText: 'City', 
+                hintText: 'e.g., Lahore, Karachi, Islamabad', 
+                prefixIcon: Icon(Icons.location_city_outlined, color: Theme.of(context).colorScheme.primary), 
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+              ), 
+              validator: (value) => (value == null || value.trim().isEmpty) ? 'Please enter the city name' : null,
+              onChanged: (value) => _cityController.text = value,
             );
           },
         ),
@@ -705,35 +602,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Privacy',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('Privacy', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         Row(
           children: [
-            _buildPrivacyOption(
-              PostPrivacy.public,
-              Icons.public,
-              'Public',
-              'Anyone',
-            ),
+            _buildPrivacyOption(PostPrivacy.public, Icons.public, 'Public', 'Anyone'),
             const SizedBox(width: 8),
-            _buildPrivacyOption(
-              PostPrivacy.friends,
-              Icons.group_outlined,
-              'Friends',
-              'Friends only',
-            ),
+            _buildPrivacyOption(PostPrivacy.friends, Icons.group_outlined, 'Friends', 'Friends only'),
             const SizedBox(width: 8),
-            _buildPrivacyOption(
-              PostPrivacy.private,
-              Icons.lock_outline,
-              'Only Me',
-              'Private',
-            ),
+            _buildPrivacyOption(PostPrivacy.private, Icons.lock_outline, 'Only Me', 'Private'),
           ],
         ),
       ],
@@ -747,46 +624,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         onTap: () => setState(() => _privacy = value),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-            ),
-          ),
+          decoration: BoxDecoration(color: isSelected ? Theme.of(context).colorScheme.primaryContainer : Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3))),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+              Icon(icon, color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(height: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.onPrimaryContainer
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurface)),
+              Text(subtitle, style: TextStyle(fontSize: 10, color: isSelected ? Theme.of(context).colorScheme.onPrimaryContainer : Theme.of(context).colorScheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -797,51 +642,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Widget _buildAIVerificationInfo() {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .secondaryContainer
-            .withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color:
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
-        ),
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12), border: Border.all(color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2))),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.cloud_done_outlined,
-              color: Theme.of(context).colorScheme.secondary, size: 20),
+          Icon(Icons.cloud_done_outlined, color: Theme.of(context).colorScheme.secondary, size: 20),
           const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Cloud Vision AI Review',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Every photo is checked for landmarks, tourist spots, and monuments. '
-                  'Selfies without a visible destination and non-travel images are rejected.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.4,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSecondaryContainer
-                        .withValues(alpha: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Image Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.secondary)), const SizedBox(height: 2), Text('Every photo is checked for landmarks, tourist spots, and monuments. Selfies without a visible destination and non-travel images will be rejected.', style: TextStyle(fontSize: 11, height: 1.4, color: Theme.of(context).colorScheme.onSecondaryContainer.withValues(alpha: 0.8)))]))
         ],
       ),
     );

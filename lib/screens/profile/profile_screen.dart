@@ -11,6 +11,7 @@ import 'package:wanderlens/widgets/user_avatar.dart';
 import 'package:wanderlens/screens/profile/edit_profile_screen.dart';
 import 'package:wanderlens/screens/settings/settings_screen.dart';
 import 'package:wanderlens/screens/follow/friends_list_screen.dart';
+import 'package:wanderlens/screens/admin/admin_dashboard_screen.dart';
 import '../../responsive/constrained_scaffold.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -66,28 +67,109 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   // --- Full Screen Image View Logic ---
-  void _showFullScreenImage(String imageUrl) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              child: Image.network(imageUrl, fit: BoxFit.contain),
-            ),
+  void _showPostOptions(BuildContext context, Post post) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.open_in_new_outlined,
+                    color: Theme.of(context).colorScheme.primary),
+                title: const Text('View Post'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PostDetailScreen(
+                        post: post,
+                        currentUserId: _currentUserId ?? '',
+                        onPostUpdated: _loadUser,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Post',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeletePost(post);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeletePost(Post post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Post?'),
+        content: const Text(
+            'This will permanently delete the post and its image. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    try {
+      await PostService.deletePost(post.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Post deleted.'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e')),
+        );
+      }
+    }
   }
 
   void _unfriend() async {
@@ -134,6 +216,18 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               centerTitle: true,
               title: Text(_user!.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               actions: [
+                // Admin panel button — only visible to admins
+                if (_isCurrentUser && (_user?.isAdmin ?? false))
+                  IconButton(
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    tooltip: 'Admin Panel',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminDashboardScreen(),
+                      ),
+                    ),
+                  ),
                 if (_isCurrentUser)
                   IconButton(
                     icon: const Icon(Icons.settings_outlined),
@@ -330,7 +424,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       child: Container(
         height: 50,
         decoration: BoxDecoration(
-          color: colorScheme.onSurface.withOpacity(0.08),
+          color: colorScheme.onSurface.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(25),
         ),
         child: TabBar(
@@ -341,7 +435,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ),
           indicatorSize: TabBarIndicatorSize.tab,
           labelColor: Colors.white,
-          unselectedLabelColor: colorScheme.onSurface.withOpacity(0.6),
+          unselectedLabelColor: colorScheme.onSurface.withValues(alpha: 0.6),
           dividerColor: Colors.transparent,
           labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -380,15 +474,54 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         if (posts.isEmpty) return const Center(child: Text("No posts yet"));
 
         return GridView.builder(
-          physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.all(1),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 1.5, mainAxisSpacing: 1.5),
           itemCount: posts.length,
           itemBuilder: (context, index) {
+            final post = posts[index];
             return GestureDetector(
-              onTap: () => _showFullScreenImage(posts[index].imageUrl),
-              onLongPress: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: posts[index], currentUserId: _currentUserId ?? '', onPostUpdated: _loadUser))),
-              child: Image.network(posts[index].imageUrl, fit: BoxFit.cover),
+              // Tap → open full post detail (has like / comment / delete)
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PostDetailScreen(
+                    post: post,
+                    currentUserId: _currentUserId ?? '',
+                    onPostUpdated: _loadUser,
+                  ),
+                ),
+              ),
+              // Long-press → quick action sheet (owner only: delete)
+              onLongPress: _isCurrentUser
+                  ? () => _showPostOptions(context, post)
+                  : null,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(post.imageUrl, fit: BoxFit.cover),
+                  // Pending badge overlay
+                  if (post.status == PostStatus.pending)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Review',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           },
         );

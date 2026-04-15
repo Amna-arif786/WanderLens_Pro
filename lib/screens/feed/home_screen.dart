@@ -133,7 +133,13 @@ class _HomeScreenState extends State<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: _refreshFeed,
         child: StreamBuilder<QuerySnapshot>(
-          stream: _firestore.collection('posts').snapshots(),
+          // Fetch all posts ordered by date; status + privacy filtering is
+          // done in Dart so that old posts (without a 'status' field) also
+          // appear — fromJson defaults missing status to PostStatus.approved.
+          stream: _firestore
+              .collection('posts')
+              .orderBy('createdAt', descending: true)
+              .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -149,13 +155,16 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            final List<Post> posts = snapshot.data!.docs.map((doc) {
-              return Post.fromJson(doc.data() as Map<String, dynamic>);
-            }).where((post) {
-              return post.privacy == PostPrivacy.public || post.userId == _currentUserId;
-            }).toList();
-
-            posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            final List<Post> posts = snapshot.data!.docs
+                .map((doc) =>
+                    Post.fromJson(doc.data() as Map<String, dynamic>))
+                // Feed should only show approved posts.
+                // (Old posts without a 'status' field default to approved in Post.fromJson.)
+                .where((post) => post.status == PostStatus.approved)
+                .where((post) =>
+                    post.privacy == PostPrivacy.public ||
+                    post.userId == _currentUserId)
+                .toList();
 
             if (posts.isEmpty) {
               return const Center(child: Text('No posts to show.'));

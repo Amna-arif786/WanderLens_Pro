@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -36,7 +37,7 @@ class StorageService {
       final jsonList = items.map((item) => toJson(item)).toList();
       await prefs.setString(key, jsonEncode(jsonList));
     } catch (e) {
-      print('Error saving list for key $key: $e');
+      debugPrint('Error saving list for key $key: $e');
     }
   }
 
@@ -55,21 +56,22 @@ class StorageService {
             items.add(fromJson(json));
           }
         } catch (e) {
-          print('Error parsing item in $key: $e');
+          debugPrint('Error parsing item in $key: $e');
           continue;
         }
       }
 
       await saveList(key, items, (item) {
-        if (item is dynamic && item.toJson != null) {
-          return item.toJson();
+        try {
+          return (item as dynamic).toJson() as Map<String, dynamic>;
+        } catch (_) {
+          return <String, dynamic>{};
         }
-        return {};
       });
 
       return items;
     } catch (e) {
-      print('Error loading list for key $key: $e');
+      debugPrint('Error loading list for key $key: $e');
       return [];
     }
   }

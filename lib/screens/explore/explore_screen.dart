@@ -64,15 +64,19 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     setState(() => _isUserSearching = true);
     try {
       final results = await UserService.searchUsers(q, excludeUserId: _currentUser?.id);
-      if (mounted) setState(() {
-        _searchResults = results;
-        _isUserSearching = false;
-      });
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isUserSearching = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() {
-        _searchResults = [];
-        _isUserSearching = false;
-      });
+      if (mounted) {
+        setState(() {
+          _searchResults = [];
+          _isUserSearching = false;
+        });
+      }
     }
   }
 
@@ -117,9 +121,9 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.3)),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: TextField(
         controller: _searchController,
@@ -193,7 +197,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
             color: isSelected ? colorScheme.primary : colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: isSelected ? Colors.transparent : colorScheme.outlineVariant.withOpacity(0.5)
+                color: isSelected ? Colors.transparent : colorScheme.outlineVariant.withValues(alpha: 0.5)
             ),
           ),
           child: Row(
@@ -227,7 +231,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.travel_explore, size: 80, color: colorScheme.primary.withOpacity(0.2)),
+            Icon(Icons.travel_explore, size: 80, color: colorScheme.primary.withValues(alpha: 0.2)),
             const SizedBox(height: 16),
             Text(
                 'Discover new destinations',
@@ -243,7 +247,10 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     }
 
     return StreamBuilder<QuerySnapshot>(
-      stream: _firestore.collection('posts').where('privacy', isEqualTo: 'public').snapshots(),
+      stream: _firestore
+          .collection('posts')
+          .where('privacy', isEqualTo: 'public')
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
@@ -251,6 +258,9 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
         final docs = snapshot.data?.docs ?? [];
 
         final filteredPosts = docs.map((doc) => Post.fromJson(doc.data() as Map<String, dynamic>))
+            // Explore should only show approved posts.
+            // (Old posts without a 'status' field default to approved in Post.fromJson.)
+            .where((post) => post.status == PostStatus.approved)
             .where((post) =>
         post.location.toLowerCase().contains(query) ||
             post.cityName.toLowerCase().contains(query))
@@ -286,7 +296,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           Center(
             child: Column(
               children: [
-                Icon(Icons.person_search_outlined, size: 60, color: colorScheme.onSurfaceVariant.withOpacity(0.3)),
+                Icon(Icons.person_search_outlined, size: 60, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
                 const SizedBox(height: 10),
                 Text(
                     'Search for other travelers',
@@ -360,7 +370,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: InkWell(
         onTap: () {
@@ -374,7 +384,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: colorScheme.primary.withOpacity(0.5), width: 2),
+                border: Border.all(color: colorScheme.primary.withValues(alpha: 0.5), width: 2),
               ),
               child: CircleAvatar(
                 radius: 30,

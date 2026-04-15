@@ -4,8 +4,9 @@ class ConstrainedScaffold extends StatelessWidget {
   final Widget body;
   final PreferredSizeWidget? appBar;
   final Widget? drawer;
-  final Color? backgroundColor; // Added this property
-  final Widget? bottomNavigationBar; // Added this property for future use
+  final Color? backgroundColor;
+  final Widget? bottomNavigationBar;
+  final Widget? floatingActionButton;
 
   const ConstrainedScaffold({
     super.key,
@@ -14,6 +15,7 @@ class ConstrainedScaffold extends StatelessWidget {
     this.drawer,
     this.backgroundColor,
     this.bottomNavigationBar,
+    this.floatingActionButton,
   });
 
   @override
@@ -21,8 +23,9 @@ class ConstrainedScaffold extends StatelessWidget {
     return Scaffold(
       appBar: appBar,
       drawer: drawer,
-      backgroundColor: backgroundColor, // Pass the color to the underlying Scaffold
+      backgroundColor: backgroundColor,
       bottomNavigationBar: bottomNavigationBar,
+      floatingActionButton: floatingActionButton,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(

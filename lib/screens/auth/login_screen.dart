@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainNavigation()),
+          MaterialPageRoute(builder: (context) =>  MainNavigation()),
         );
       }
     } catch (e) {
@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         // Existing user → go straight to the app
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainNavigation()),
+          MaterialPageRoute(builder: (context) =>  MainNavigation()),
         );
       }
     } catch (e) {

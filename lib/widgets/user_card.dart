@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:wanderlens/models/user.dart';
 import 'package:wanderlens/models/friend_request.dart';
 import 'package:wanderlens/services/friend_service.dart';
-import 'package:wanderlens/services/user_service.dart';
 import 'package:wanderlens/screens/profile/profile_screen.dart';
 import 'package:wanderlens/widgets/user_avatar.dart';
 
@@ -67,7 +66,7 @@ class _UserCardState extends State<UserCard> {
         }
       }
     } catch (e) {
-      print('Error checking friend status: $e');
+      debugPrint('Error checking friend status: $e');
     } finally {
       setState(() => _isLoading = false);
     }

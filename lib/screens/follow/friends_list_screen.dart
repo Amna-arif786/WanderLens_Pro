@@ -125,7 +125,7 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 100, color: colorScheme.primary.withOpacity(0.2)),
+            Icon(Icons.people_outline, size: 100, color: colorScheme.primary.withValues(alpha: 0.2)),
             const SizedBox(height: 20),
             Text(
                 'No friends yet',
@@ -181,12 +181,12 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
         color: colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: colorScheme.outlineVariant.withOpacity(isDark ? 0.2 : 0.5)
+            color: colorScheme.outlineVariant.withValues(alpha: isDark ? 0.2 : 0.5)
         ),
         boxShadow: [
           if (!isDark)
             BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4)
             ),
@@ -205,7 +205,7 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: colorScheme.primary.withOpacity(0.2), width: 3),
+                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.2), width: 3),
                 ),
                 child: UserAvatar(imageUrl: friend.profileImageUrl, size: 55),
               ),
@@ -237,7 +237,7 @@ class _FriendsListScreenState extends State<FriendsListScreen> {
                   onPressed: () => _unfriend(friend),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: colorScheme.error,
-                    side: BorderSide(color: colorScheme.error.withOpacity(0.4)),
+                    side: BorderSide(color: colorScheme.error.withValues(alpha: 0.4)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),

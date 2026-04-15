@@ -35,7 +35,7 @@ class _UserSuggestionsScreenState extends State<UserSuggestionsScreen> {
         );
       }
     } catch (e) {
-      print('Error loading suggested users: $e');
+      debugPrint('Error loading suggested users: $e');
     } finally {
       setState(() => _isLoading = false);
     }
